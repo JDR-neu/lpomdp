@@ -6,16 +6,19 @@
 CPP_SRCS += \
 ../src/losm_lpomdp.cpp \
 ../src/losm_state.cpp \
+../src/lpbvi.cpp \
 ../src/lpomdp.cpp 
 
 OBJS += \
 ./src/losm_lpomdp.o \
 ./src/losm_state.o \
+./src/lpbvi.o \
 ./src/lpomdp.o 
 
 CPP_DEPS += \
 ./src/losm_lpomdp.d \
 ./src/losm_state.d \
+./src/lpbvi.d \
 ./src/lpomdp.d 
 
 
