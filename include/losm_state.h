@@ -30,6 +30,8 @@
 
 #include "../../losm/losm/include/losm_node.h"
 
+#include <unordered_map>
+
 /**
  * A custom LSOM state class which holds the two LOSM nodes (in order) and other relevant information.
  */

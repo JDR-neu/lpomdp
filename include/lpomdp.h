@@ -22,8 +22,8 @@
  */
 
 
-#ifndef L_MDP_H
-#define L_MDP_H
+#ifndef LPOMDP_H
+#define LPOMDP_H
 
 
 #include "../../librbr/librbr/include/pomdp/pomdp.h"
@@ -87,4 +87,4 @@ protected:
 };
 
 
-#endif // L_MDP_H
+#endif // LPOMDP_H
