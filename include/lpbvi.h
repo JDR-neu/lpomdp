@@ -124,32 +124,11 @@ protected:
 			FactoredRewards *R, Horizon *h, std::vector<float> &delta);
 
 	/**
-	 * Compute A_{i+1}^t given that the value function for i, V_i^*, has already converged.
-	 * @param	S 		The finite states.
-	 * @param	Ai		The set of actions, which are likely pruned.
-	 * @param	T 		The finite state transition function.
-	 * @param	Ri 		The state-action-state rewards.
-	 * @param	h 		The horizon.
-	 * @param	s 		The current state being examined, i.e., V_i(s).
-	 * @param	Vi		The i-th value function.
-	 * @param	deltai	The slack value for i in K.
-	 * @param	AiPlus1	The new set of actions for i + 1. This will be updated.
+	 * Compute the approximate density (an upper bound) of the belief points.
+	 * @param	S	The set of states.
+	 * @return	The approximate density (an upper bound).
 	 */
-//	void compute_A_delta(StatesMap *S, std::vector<Action *> &Ai,
-//			StateTransitions *T, SASRewards *Ri, Horizon *h,
-//			State *s, std::unordered_map<State *, double> &Vi,
-//			float deltai,
-//			std::vector<Action *> &AiPlus1);
-
-	/**
-	 * The value of the states, one for each reward.
-	 */
-//	std::vector<std::unordered_map<State *, double> > V;
-
-	/**
-	 * The tolerance convergence criterion.
-	 */
-//	double epsilon;
+	virtual double compute_belief_density(StatesMap *S);
 
 };
 
