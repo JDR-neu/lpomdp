@@ -131,6 +131,18 @@ public:
 	 */
 	const std::vector<double> &get_rewards_weights() const;
 
+	/**
+	 * Get the set of goal states.
+	 * @return	The set of goal states.
+	 */
+	const std::vector<LOSMState *> &get_goal_states() const;
+
+	/**
+	 * Get the set of tiredness states vector.
+	 * @return	The set of tiredness states vector.
+	 */
+	const std::vector<std::vector<LOSMState *> > &get_tiredness_states() const;
+
 private:
 	/**
 	 * Create the helper hash function for edges.
@@ -232,6 +244,17 @@ private:
 	 * One of the two goal node's UID.
 	 */
 	unsigned long goalNodeUID2;
+
+	/**
+	 * The set of goal states as part of the LPOMDP.
+	 */
+	std::vector<LOSMState *> goalStates;
+
+	/**
+	 * The set of pairs of states which are attentive / tired for each physical location and
+	 * whether or not autonomy is enabled.
+	 */
+	std::vector<std::vector<LOSMState *> > tirednessStates;
 
 };
 

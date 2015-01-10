@@ -246,10 +246,10 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 				std::cout << "    " << (u + 1) << " / " << updates << std::endl; std::cout.flush();
 
 				// For each of the belief points, we must compute the optimal alpha vector.
-				int beliefCounter = 0;
+//				int beliefCounter = 0;
 				for (BeliefState *belief : B) {
-					std::cout << "      " << (beliefCounter + 1) << " / " << B.size() << std::endl; std::cout.flush();
-					beliefCounter++;
+//					std::cout << "      " << (beliefCounter + 1) << " / " << B.size() << std::endl; std::cout.flush();
+//					beliefCounter++;
 
 					PolicyAlphaVector *maxAlphaB = nullptr;
 					double maxAlphaDotBeta = 0.0;
@@ -257,7 +257,7 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 					// Compute the optimal alpha vector for this belief state.
 					int actionCounter = 0;
 					for (Action *action : Ai[belief]) {
-						std::cout << "        " << (actionCounter + 1) << " / " << Ai[belief].size() << std::endl; std::cout.flush();
+//						std::cout << "        " << (actionCounter + 1) << " / " << Ai[belief].size() << std::endl; std::cout.flush();
 						actionCounter++;
 
 						PolicyAlphaVector *alphaBA = bellman_update_belief_state(S, Z, T, O, h,

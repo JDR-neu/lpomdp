@@ -37,30 +37,38 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	// Load the LOSM POMDP.
-	LOSMPOMDP *losmPOMDP = nullptr;
+	// Load the LOSM LPOMDP.
+	LOSMPOMDP *losmLPOMDP = nullptr;
 	try {
-		losmPOMDP = new LOSMPOMDP(argv[1], argv[2], argv[3], argv[6], argv[7]);
+		losmLPOMDP = new LOSMPOMDP(argv[1], argv[2], argv[3], argv[6], argv[7]);
 	} catch (LOSMException &err) {
 		std::cerr << "Failed to load the files provided." << std::endl;
 		return -1;
 	}
 
-	std::cout << "1"; std::cout.flush();
-	losmPOMDP->set_slack(10.0f, 0.0f);
+	losmLPOMDP->set_slack(10.0f, 0.0f);
 
-	unsigned int numExpansions = 1;
-
-	std::cout << "2"; std::cout.flush();
 	LPBVI solver;
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
-	solver.set_num_expansion_iterations(numExpansions); // No expansions!
-	solver.compute_num_update_iterations(losmPOMDP, 1.0); // Within 1.0 of optimal answer!
-	solver.set_num_update_iterations(solver.get_num_update_iterations() / numExpansions);
+	/*
+	solver.set_num_expansion_iterations(1); // No expansions!
+	solver.compute_num_update_iterations(losmLPOMDP, 1.0); // Within 1.0 of optimal answer!
+	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
+	//*/
+
+	//*
+	solver.set_num_expansion_iterations(1);
+	solver.set_num_update_iterations(10);
+	//*/
+
+	/*
+	solver.set_num_expansion_iterations(10);
+	solver.set_num_update_iterations(100);
+	//*/
 
 	// Add all states as belief points.
-	//*
-	StatesMap *S = dynamic_cast<StatesMap *>(losmPOMDP->get_states());
+	/*
+	StatesMap *S = dynamic_cast<StatesMap *>(losmLPOMDP->get_states());
 	for (auto s : *S) {
 		LOSMState *state = dynamic_cast<LOSMState *>(resolve(s));
 		BeliefState *b = new BeliefState();
@@ -69,16 +77,29 @@ int main(int argc, char *argv[])
 	}
 	//*/
 
-	// Add the initial state as the belief point. We will instead run some expansions.
+	// Add uniform distribution over tiredness possibilities of states as belief points.
+	//*
+	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
+		BeliefState *b = new BeliefState();
+		for (LOSMState *state : statesVector) {
+			b->set(state, 1.0 / (double)statesVector.size());
+		}
+		solver.add_initial_belief_state(b);
+	}
+	//*/
+
+	// Add combinations of goal states as the belief points. We will instead run some expansions off of these.
 	/*
-	// TODO!!!
+	for (LOSMState *s : losmLPOMDP->get_goal_states()) {
+		BeliefState *b = new BeliefState();
+		b->set(s, 1.0);
+		solver.add_initial_belief_state(b);
+	}
 	//*/
 
 	PolicyAlphaVectors **policy = nullptr;
-	std::cout << "3"; std::cout.flush();
 //	try {
-		policy = solver.solve(losmPOMDP);
-		std::cout << "4"; std::cout.flush();
+		policy = solver.solve(losmLPOMDP);
 //	} catch (const CoreException &err) {
 //		std::cout << " Failure." << std::endl;
 //	} catch (const StateException &err) {
@@ -96,10 +117,9 @@ int main(int argc, char *argv[])
 //	} catch (const PolicyException &err) {
 //		std::cout << " Failure." << std::endl;
 //	}
-	losmPOMDP->save_policy(policy, losmPOMDP->get_rewards()->get_num_rewards(), argv[8]);
-	std::cout << "5"; std::cout.flush();
+		losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
 
-	for (unsigned int i = 0; i < losmPOMDP->get_rewards()->get_num_rewards(); i++) {
+	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {
 		delete [] policy[i];
 	}
 	delete [] policy;

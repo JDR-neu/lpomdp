@@ -122,7 +122,7 @@ bool LOSMPOMDP::save_policy(PolicyAlphaVectors **policy, unsigned int k, std::st
 		file << ls->get_autonomy() << ",";
 		file << successors.at(ls).at(ia->get_index())->get_previous_step()->get_uid() << ",";
 		file << successors.at(ls).at(ia->get_index())->get_autonomy() << ",";
-		for (int i = 0; i < k; i++) {
+		for (unsigned int i = 0; i < k; i++) {
 			file << policy[i]->compute_value(&b);
 			if (i != k - 1) {
 				file << ",";
@@ -182,6 +182,16 @@ const std::vector<double> &LOSMPOMDP::get_rewards_weights() const
 	return R->get_weights();
 }
 
+const std::vector<LOSMState *> &LOSMPOMDP::get_goal_states() const
+{
+	return goalStates;
+}
+
+const std::vector<std::vector<LOSMState *> > &LOSMPOMDP::get_tiredness_states() const
+{
+	return tirednessStates;
+}
+
 void LOSMPOMDP::create_edges_hash(LOSM *losm)
 {
 	for (const LOSMEdge *edge : losm->get_edges()) {
@@ -196,6 +206,8 @@ void LOSMPOMDP::create_states(LOSM *losm)
 
 	states = new StatesMap();
 	StatesMap *S = dynamic_cast<StatesMap *>(states);
+
+	goalStates.clear();
 
 	std::cout << "Num Nodes: " << losm->get_nodes().size() << std::endl; std::cout.flush();
 	std::cout << "Num Edges: " << losm->get_edges().size() << std::endl; std::cout.flush();
@@ -262,27 +274,63 @@ void LOSMPOMDP::create_states(LOSM *losm)
 		// If the code made it here, then n1 and n2 are two intersections,
 		// and 'distance' and 'time' store the respective distance and time.
 		// Now, create the actual pair of LOSMStates.
-		for (int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
-			// Autonomy is not enabled. This always exists.
-			S->add(new LOSMState(current, previous, i, false,
-													distance, speedLimit, isGoal, isAutonomyCapable,
-													currentStepNode, previousStepNode));
-			if (createBoth) {
-				S->add(new LOSMState(previous, current, i, false,
-														distance, speedLimit, isGoal, isAutonomyCapable,
-														previousStepNode, currentStepNode));
-			}
 
-			// If possible, create the states in which autonomy is enabled. This may or may not exist.
-			if (isAutonomyCapable) {
-				S->add(new LOSMState(current, previous, i, true,
-														distance, speedLimit, isGoal, isAutonomyCapable,
-														currentStepNode, previousStepNode));
-				if (createBoth) {
-					S->add(new LOSMState(previous, current, i, true,
-														distance, speedLimit, isGoal, isAutonomyCapable,
-														previousStepNode, currentStepNode));
+		// Autonomy is not enabled. This always exists.
+		LOSMState *newLOSMState = nullptr;
+		std::vector<LOSMState *> tirednessStatesElement;
+
+		for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
+			newLOSMState = new LOSMState(current, previous, i, false,
+					distance, speedLimit, isGoal, isAutonomyCapable,
+					currentStepNode, previousStepNode);
+			S->add(newLOSMState);
+			if (isGoal) {
+				goalStates.push_back(newLOSMState);
+			}
+			tirednessStatesElement.push_back(newLOSMState);
+		}
+		tirednessStates.push_back(tirednessStatesElement);
+
+		if (createBoth) {
+			for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
+				newLOSMState = new LOSMState(previous, current, i, false,
+						distance, speedLimit, isGoal, isAutonomyCapable,
+						previousStepNode, currentStepNode);
+				S->add(newLOSMState);
+				if (isGoal) {
+					goalStates.push_back(newLOSMState);
 				}
+				tirednessStatesElement.push_back(newLOSMState);
+			}
+			tirednessStates.push_back(tirednessStatesElement);
+		}
+
+		// If possible, create the states in which autonomy is enabled. This may or may not exist.
+		if (isAutonomyCapable) {
+			for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
+				newLOSMState = new LOSMState(current, previous, i, true,
+						distance, speedLimit, isGoal, isAutonomyCapable,
+						currentStepNode, previousStepNode);
+				S->add(newLOSMState);
+				if (isGoal) {
+					goalStates.push_back(newLOSMState);
+				}
+				tirednessStatesElement.push_back(newLOSMState);
+			}
+			tirednessStates.push_back(tirednessStatesElement);
+
+			if (createBoth) {
+				for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
+					newLOSMState = new LOSMState(previous, current, i, true,
+							distance, speedLimit, isGoal, isAutonomyCapable,
+							previousStepNode, currentStepNode);
+					S->add(newLOSMState);
+					if (isGoal) {
+						goalStates.push_back(newLOSMState);
+					}
+					tirednessStatesElement.push_back(newLOSMState);
+				}
+				tirednessStates.push_back(tirednessStatesElement);
 			}
 		}
 	}
@@ -315,6 +363,8 @@ void LOSMPOMDP::create_states(LOSM *losm)
 	//*/
 
 	std::cout << "Num States: " << S->get_num_states() << std::endl; std::cout.flush();
+
+	std::cout << "Num Goal States: " << goalStates.size() << std::endl;
 
 	std::cout << "Done States!" << std::endl; std::cout.flush();
 }
@@ -373,8 +423,8 @@ void LOSMPOMDP::create_observations(LOSM *losm)
 
 void LOSMPOMDP::create_state_transitions(LOSM *losm)
 {
-	stateTransitions = new StateTransitionsArray(LOSMState::get_num_states(), IndexedAction::get_num_actions());
-//	StateTransitionsArray *T = dynamic_cast<StateTransitionsArray *>(stateTransitions);
+	StateTransitionsArray *T = new StateTransitionsArray(LOSMState::get_num_states(), IndexedAction::get_num_actions());
+	stateTransitions = T;
 
 	StatesMap *S = dynamic_cast<StatesMap *>(states);
 	ActionsMap *A = dynamic_cast<ActionsMap *>(actions);
@@ -423,7 +473,8 @@ void LOSMPOMDP::create_state_transitions(LOSM *losm)
 				// If no probability was assigned, it means that while there is an action, it is impossible to transition
 				// from s's level of tiredness to sp's level of tiredness. Otherwise, we can assign a state transition.
 				if (p >= 0.0) {
-					stateTransitions->set(s, a, sp, p);
+					T->set(s, a, sp, p);
+					T->add_successor(s, a, sp);
 
 					IndexedAction *ia = dynamic_cast<IndexedAction *>(a);
 					successors[s][ia->get_index()] = sp;
@@ -437,7 +488,8 @@ void LOSMPOMDP::create_state_transitions(LOSM *losm)
 		// possible. This must be done for both enabled and disabled autonomy.
 		for (int i = index; i < (int)IndexedAction::get_num_actions(); i++) {
 			Action *a = A->get(i);
-			stateTransitions->set(s, a, s, 1.0);
+			T->set(s, a, s, 1.0);
+			T->add_successor(s, a, s);
 			successors[s][i] = s;
 		}
 	}
@@ -489,10 +541,10 @@ void LOSMPOMDP::create_state_transitions(LOSM *losm)
 
 void LOSMPOMDP::create_observation_transitions(LOSM *losm)
 {
-	observationTransitions = new ObservationTransitionsArray(LOSMState::get_num_states(),
+	ObservationTransitionsArray *O = new ObservationTransitionsArray(LOSMState::get_num_states(),
 			IndexedAction::get_num_actions(),
 			IndexedObservation::get_num_observations());
-//	ObservationTransitionsArray *O = dynamic_cast<ObservationTransitionsArray *>(observationTransitions);
+	observationTransitions = O;
 
 	StatesMap *S = dynamic_cast<StatesMap *>(states);
 	ActionsMap *A = dynamic_cast<ActionsMap *>(actions);
@@ -507,12 +559,20 @@ void LOSMPOMDP::create_observation_transitions(LOSM *losm)
 			Observation *attentive = Z->get(0);
 			Observation *tired = Z->get(1);
 
+			// Note: Setting the "add_available" is pointless, since all observations
+			// are always available.
 			if (sp->get_tiredness() == 0) {
-				observationTransitions->set(a, sp, attentive, 0.75);
-				observationTransitions->set(a, sp, tired, 0.25);
+				O->set(a, sp, attentive, 0.75);
+//				O->add_available(a, sp, attentive);
+
+				O->set(a, sp, tired, 0.25);
+//				O->add_available(a, sp, tired);
 			} else if (sp->get_tiredness() == 1) {
-				observationTransitions->set(a, sp, attentive, 0.25);
-				observationTransitions->set(a, sp, tired, 0.75);
+				O->set(a, sp, attentive, 0.25);
+//				O->add_available(a, sp, attentive);
+
+				O->set(a, sp, tired, 0.75);
+//				O->add_available(a, sp, tired);
 			}
 		}
 	}
@@ -671,7 +731,7 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 
 void LOSMPOMDP::create_misc(LOSM *losm)
 {
-	StatesMap *S = dynamic_cast<StatesMap *>(states);
+//	StatesMap *S = dynamic_cast<StatesMap *>(states);
 
 	// The initial state is arbitrary.
 //	initialState = new Initial(S->get(0));
