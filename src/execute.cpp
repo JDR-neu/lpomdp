@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
 	//*
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(10);
+	solver.set_num_update_iterations(100);
 	//*/
 
 	/*
@@ -66,7 +66,18 @@ int main(int argc, char *argv[])
 	solver.set_num_update_iterations(100);
 	//*/
 
-	// Add all states as belief points.
+
+
+	// TODO: You need to assign which actions are available at each state (yes state) so that you can remove
+	// the "-1e+35" penalty for taking impossible actions at intersections. The reason is that it screws up
+	// the calculation of epsiloni in lpbvi.cpp, which is subtracted from the val to get etai....
+
+	// TODO: Once you fix above, also in lpbvi.cpp at the initialization of zeroAlphaVector, use the
+	// R_min / (1 - gamma) instead of 0.
+
+
+
+	// Add all states as perfect belief points; this is similar to an LMDP then.
 	/*
 	StatesMap *S = dynamic_cast<StatesMap *>(losmLPOMDP->get_states());
 	for (auto s : *S) {

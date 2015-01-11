@@ -236,7 +236,8 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			for (unsigned int j = 0; j < B.size(); j++) {
 				PolicyAlphaVector *zeroAlphaVector = new PolicyAlphaVector();
 				for (auto s : *S) {
-					zeroAlphaVector->set(resolve(s), Ri->get_min() / (1.0 - h->get_discount_factor()));
+//					zeroAlphaVector->set(resolve(s), Ri->get_min() / (1.0 - h->get_discount_factor()));
+					zeroAlphaVector->set(resolve(s), 0.0);
 				}
 				gamma[!current].push_back(zeroAlphaVector);
 			}
@@ -255,10 +256,10 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 					double maxAlphaDotBeta = 0.0;
 
 					// Compute the optimal alpha vector for this belief state.
-					int actionCounter = 0;
+//					int actionCounter = 0;
 					for (Action *action : Ai[belief]) {
 //						std::cout << "        " << (actionCounter + 1) << " / " << Ai[belief].size() << std::endl; std::cout.flush();
-						actionCounter++;
+//						actionCounter++;
 
 						PolicyAlphaVector *alphaBA = bellman_update_belief_state(S, Z, T, O, h,
 								gammaAStar[i][action], gamma[!current], action, belief);
@@ -292,7 +293,6 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 
 			// Set the current gamma to the policy object. Note: This transfers the responsibility of
 			// memory management to the PolicyAlphaVectors object.
-			std::cout << gamma[!current].size() << std::endl; std::cout.flush();
 			policy[i]->set(gamma[!current]);
 
 			// Setup the one-step slack eta_i value.
@@ -300,9 +300,16 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			double etai = std::max(0.0, (1.0 - h->get_discount_factor()) * delta[i] - epsiloni);
 
 			// Restrict the set of actions available to each belief point in the next i+1 value function.
-			for (BeliefState *b : B) {
-				policy[i]->get(b, etai, Ai[b]);
+			if (i < R->get_num_rewards() - 1) {
+				for (BeliefState *b : B) {
+					policy[i]->get(b, etai, Ai[b]);
+//					std::cout << "Ai[b].size() = " << Ai[b].size() << std::endl; std::cout.flush();
+				}
 			}
+
+//			std::cout << "delta[i] = " << delta[i] << std::endl; std::cout.flush();
+//			std::cout << "etai = " << etai << std::endl; std::cout.flush();
+//			std::cout << "epsiloni = " << epsiloni << std::endl; std::cout.flush();
 		}
 
 		// Perform an expansion based on the rule the user wishes to use.
