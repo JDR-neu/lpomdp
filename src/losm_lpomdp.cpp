@@ -277,7 +277,7 @@ void LOSMPOMDP::create_states(LOSM *losm)
 
 		// Autonomy is not enabled. This always exists.
 		LOSMState *newLOSMState = nullptr;
-		std::vector<LOSMState *> tirednessStatesElement;
+		std::vector<LOSMState *> tirednessStatesElements;
 
 		for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
 			newLOSMState = new LOSMState(current, previous, i, false,
@@ -287,9 +287,10 @@ void LOSMPOMDP::create_states(LOSM *losm)
 			if (isGoal) {
 				goalStates.push_back(newLOSMState);
 			}
-			tirednessStatesElement.push_back(newLOSMState);
+			tirednessStatesElements.push_back(newLOSMState);
 		}
-		tirednessStates.push_back(tirednessStatesElement);
+		tirednessStates.push_back(tirednessStatesElements);
+		tirednessStatesElements.clear();
 
 		if (createBoth) {
 			for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
@@ -300,9 +301,10 @@ void LOSMPOMDP::create_states(LOSM *losm)
 				if (isGoal) {
 					goalStates.push_back(newLOSMState);
 				}
-				tirednessStatesElement.push_back(newLOSMState);
+				tirednessStatesElements.push_back(newLOSMState);
 			}
-			tirednessStates.push_back(tirednessStatesElement);
+			tirednessStates.push_back(tirednessStatesElements);
+			tirednessStatesElements.clear();
 		}
 
 		// If possible, create the states in which autonomy is enabled. This may or may not exist.
@@ -315,9 +317,10 @@ void LOSMPOMDP::create_states(LOSM *losm)
 				if (isGoal) {
 					goalStates.push_back(newLOSMState);
 				}
-				tirednessStatesElement.push_back(newLOSMState);
+				tirednessStatesElements.push_back(newLOSMState);
 			}
-			tirednessStates.push_back(tirednessStatesElement);
+			tirednessStates.push_back(tirednessStatesElements);
+			tirednessStatesElements.clear();
 
 			if (createBoth) {
 				for (unsigned int i = 0; i < NUM_TIREDNESS_LEVELS; i++) {
@@ -328,9 +331,10 @@ void LOSMPOMDP::create_states(LOSM *losm)
 					if (isGoal) {
 						goalStates.push_back(newLOSMState);
 					}
-					tirednessStatesElement.push_back(newLOSMState);
+					tirednessStatesElements.push_back(newLOSMState);
 				}
-				tirednessStates.push_back(tirednessStatesElement);
+				tirednessStates.push_back(tirednessStatesElements);
+				tirednessStatesElements.clear();
 			}
 		}
 	}

@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
 //	} catch (const PolicyException &err) {
 //		std::cout << " Failure." << std::endl;
 //	}
-		losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
+	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
 
 	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {
 		delete [] policy[i];
