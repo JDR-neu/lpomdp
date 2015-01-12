@@ -52,14 +52,20 @@
 #include <algorithm>
 
 LPBVI::LPBVI() : POMDPPBVI()
-{ }
+{
+	beliefToRecord = nullptr;
+}
 
 LPBVI::LPBVI(POMDPPBVIExpansionRule expansionRule, unsigned int updateIterations,
 		unsigned int expansionIterations) : POMDPPBVI(expansionRule, updateIterations, expansionIterations)
-{ }
+{
+	beliefToRecord = nullptr;
+}
 
 LPBVI::~LPBVI()
-{ }
+{
+	reset();
+}
 
 void LPBVI::compute_num_update_iterations(POMDP *pomdp, double epsilon)
 {
@@ -95,6 +101,17 @@ void LPBVI::compute_num_update_iterations(POMDP *pomdp, double epsilon)
 
 		updates = (unsigned int)std::max((double)updates, (double)((log(epsilon) - log(Rmax - Rmin)) / log(h->get_discount_factor())));
 	}
+}
+
+void LPBVI::set_belief_to_record(BeliefState *b)
+{
+	reset();
+	beliefToRecord = new BeliefState(*b);
+}
+
+const std::vector<std::vector<double> > &LPBVI::get_recorded_values() const
+{
+	return recordedValues;
 }
 
 PolicyAlphaVectors *LPBVI::solve(POMDP *pomdp)
@@ -207,6 +224,11 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		}
 	}
 
+	// If we are recording a belief point's values, create the empty vector for each R[i].
+	if (beliefToRecord != nullptr) {
+		recordedValues.resize(R->get_num_rewards());
+	}
+
 	// Perform a predefined number of expansions. Each update adds more belief points to the set B.
 	for (unsigned int e = 0; e < expansions; e++) {
 		std::cout << "Expansion " << (e + 1) << std::endl;
@@ -279,6 +301,18 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 					}
 
 					gamma[current].push_back(maxAlphaB);
+				}
+
+				// If we are recording values, compute the belief value here.
+				if (beliefToRecord != nullptr) {
+					double maxRecordedValue = std::numeric_limits<double>::lowest();
+					for (PolicyAlphaVector *alphaRecord : gamma[current]) {
+						double recordedValue = alphaRecord->compute_value(beliefToRecord);
+						if (recordedValue > maxRecordedValue) {
+							maxRecordedValue = recordedValue;
+						}
+					}
+					recordedValues[i].push_back(maxRecordedValue);
 				}
 
 				// Prepare the next time step's gamma by clearing it. Remember again, we don't free the memory
@@ -370,4 +404,13 @@ double LPBVI::compute_belief_density(StatesMap *S)
 	}
 
 	return density;
+}
+
+void LPBVI::reset()
+{
+	if (beliefToRecord != nullptr) {
+		delete beliefToRecord;
+	}
+	beliefToRecord = nullptr;
+	recordedValues.clear();
 }

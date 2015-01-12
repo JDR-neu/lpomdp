@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	losmLPOMDP->set_slack(10.0f, 0.0f);
+	losmLPOMDP->set_slack(0.0f, 0.0f);
 
 	LPBVI solver;
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
 	//*
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(100);
+	solver.set_num_update_iterations(15);
 	//*/
 
 	/*
@@ -76,6 +76,37 @@ int main(int argc, char *argv[])
 	// R_min / (1 - gamma) instead of 0.
 
 
+	// NOTE: You stopped finding the policy at New York City.
+
+	// TODO: You need to compute the V^\pi value, and plot that. Currently, you are using the V^\eta values,
+	// which are detached from one another, namely the first one. Once you compute the correct value you
+	// will again be able to numerically see the effect of slack.
+
+
+	// Find the belief to record given the two initial UIDs defining the initial state.
+	BeliefState *beliefToRecord = nullptr;
+	unsigned long uid1 = std::stol(argv[4]);
+	unsigned long uid2 = std::stol(argv[5]);
+
+	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
+		// All the states in a statesVector are constructed with the same pair of UIDs;
+		// the only difference is the tiredness values.
+		LOSMState *s1 = statesVector[0];
+		if ((s1->get_current()->get_uid() == uid1 && s1->get_previous()->get_uid() == uid2) ||
+				(s1->get_current()->get_uid() == uid2 && s1->get_previous()->get_uid() == uid1)) {
+			beliefToRecord = new BeliefState();
+			beliefToRecord->set(statesVector[0], 0.5);
+			beliefToRecord->set(statesVector[1], 0.5);
+			solver.set_belief_to_record(beliefToRecord);
+
+			delete beliefToRecord;
+			beliefToRecord = nullptr;
+
+			std::cout << "Found and set a belief to record." << std::endl; std::cout.flush();
+			break;
+		}
+	}
+
 
 	// Add all states as perfect belief points; this is similar to an LMDP then.
 	/*
@@ -91,10 +122,32 @@ int main(int argc, char *argv[])
 	// Add uniform distribution over tiredness possibilities of states as belief points.
 	//*
 	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
-		BeliefState *b = new BeliefState();
-		for (LOSMState *state : statesVector) {
-			b->set(state, 1.0 / (double)statesVector.size());
-		}
+		// The size of statesVector is always 2 in our case.
+		BeliefState *b = nullptr;
+
+		b = new BeliefState();
+		b->set(statesVector[0], 1.0);
+		b->set(statesVector[1], 0.0);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.75);
+		b->set(statesVector[1], 0.25);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.5);
+		b->set(statesVector[1], 0.5);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.25);
+		b->set(statesVector[1], 0.75);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.0);
+		b->set(statesVector[1], 1.0);
 		solver.add_initial_belief_state(b);
 	}
 	//*/
@@ -130,6 +183,19 @@ int main(int argc, char *argv[])
 //	}
 	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
 
+	// After everything is computed, output the recorded values in a csv-like format to the screen.
+	std::cout << "Recorded Values:" << std::endl; std::cout.flush();
+	unsigned int i = 0;
+	for (auto Vi : solver.get_recorded_values()) {
+//		std::cout << "V[" << i << "]:" << std::endl;
+		for (double Vit : Vi) {
+			std::cout << Vit << ",";
+		}
+		std::cout << std::endl; std::cout.flush();
+		i++;
+	}
+
+	// Free the policy memory.
 	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {
 		delete [] policy[i];
 	}

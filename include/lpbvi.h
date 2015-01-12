@@ -81,6 +81,18 @@ public:
 	void compute_num_update_iterations(POMDP *pomdp, double epsilon);
 
 	/**
+	 * Setup the belief state to record over iterations.
+	 * @param	b	The belief state to record.
+	 */
+	void set_belief_to_record(BeliefState *b);
+
+	/**
+	 * Get the recorded values of the belief state for all value functions.
+	 * @return	The vector over time of each vector of values of the specified belief state.
+	 */
+	const std::vector<std::vector<double> > &get_recorded_values() const;
+
+	/**
 	 * Throw an error if they try to solve just a POMDP.
 	 * @param	pomdp				The partially observable Markov decision process to solve.
 	 * @throw	CoreException		This is a POMDP.
@@ -129,6 +141,21 @@ protected:
 	 * @return	The approximate density (an upper bound).
 	 */
 	virtual double compute_belief_density(StatesMap *S);
+
+	/**
+	 * Reset the internal variables.
+	 */
+	virtual void reset();
+
+	/**
+	 * The belief state to record.
+	 */
+	BeliefState *beliefToRecord;
+
+	/**
+	 * The recorded values of the belief state above over iteration for each value function.
+	 */
+	std::vector<std::vector<double> > recordedValues;
 
 };
 
