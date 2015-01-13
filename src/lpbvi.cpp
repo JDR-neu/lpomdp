@@ -116,7 +116,7 @@ const std::vector<std::vector<double> > &LPBVI::get_recorded_values() const
 	return recordedValues;
 }
 
-void LPBVI::constraint_eta(bool value)
+void LPBVI::eta_constraint(bool value)
 {
 	constrainEta = value;
 }
@@ -197,6 +197,77 @@ PolicyAlphaVectors **LPBVI::solve(LPOMDP *lpomdp)
 	return solve_infinite_horizon(S, A, Z, T, O, R, h, lpomdp->get_slack());
 }
 
+PolicyAlphaVectors **LPBVI::compute_value(LPOMDP *lpomdp, PolicyAlphaVectors *policy)
+{
+	// Handle the trivial case.
+	if (lpomdp == nullptr) {
+		return nullptr;
+	}
+
+	// Attempt to convert the states object into FiniteStates.
+	StatesMap *S = dynamic_cast<StatesMap *>(lpomdp->get_states());
+	if (S == nullptr) {
+		throw StateException();
+	}
+
+	// Attempt to convert the actions object into FiniteActions.
+	ActionsMap *A = dynamic_cast<ActionsMap *>(lpomdp->get_actions());
+	if (A == nullptr) {
+		throw ActionException();
+	}
+
+	// Attempt to convert the observations object into FiniteObservations.
+	ObservationsMap *Z = dynamic_cast<ObservationsMap *>(lpomdp->get_observations());
+	if (Z == nullptr) {
+		throw ObservationException();
+	}
+
+	// Attempt to get the state transitions.
+	StateTransitions *T = lpomdp->get_state_transitions();
+	if (T == nullptr) {
+		throw StateTransitionException();
+	}
+
+	// Attempt to get the observations transitions.
+	ObservationTransitions *O = lpomdp->get_observation_transitions();
+	if (O == nullptr) {
+		throw ObservationTransitionException();
+	}
+
+	// Attempt to convert the rewards object into FactoredRewards. Also, ensure that the
+	// type of each element is SASRewards.
+	FactoredRewards *R = dynamic_cast<FactoredRewards *>(lpomdp->get_rewards());
+	if (R == nullptr) {
+		throw RewardException();
+	}
+	/*
+	for (int i = 0; i < R->get_num_rewards(); i++) {
+		SARewards *Ri = dynamic_cast<SARewards *>(R->get(i));
+		if (Ri == nullptr) {
+			throw RewardException();
+		}
+	}
+	*/
+
+	// Handle the other trivial case in which the slack variables were incorrectly defined.
+	if (lpomdp->get_slack().size() != R->get_num_rewards()) {
+		throw RewardException();
+	}
+	for (int i = 0; i < (int)lpomdp->get_slack().size(); i++) {
+		if (lpomdp->get_slack().at(i) < 0.0) {
+			throw RewardException();
+		}
+	}
+
+	// Obtain the horizon and return the correct value iteration.
+	Horizon *h = lpomdp->get_horizon();
+	if (h->is_finite()) {
+		throw CoreException();
+	}
+
+	return compute_value_execute(S, A, Z, T, O, R, h, lpomdp->get_slack(), policy);
+}
+
 PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		ObservationsMap *Z, StateTransitions *T, ObservationTransitions *O,
 		FactoredRewards *R, Horizon *h, std::vector<float> &delta)
@@ -233,6 +304,7 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 
 	// If we are recording a belief point's values, create the empty vector for each R[i].
 	if (beliefToRecord != nullptr) {
+		recordedValues.clear();
 		recordedValues.resize(R->get_num_rewards());
 	}
 
@@ -347,8 +419,9 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			// Restrict the set of actions available to each belief point in the next i+1 value function.
 			if (i < R->get_num_rewards() - 1) {
 				for (BeliefState *b : B) {
+					std::cout << "Ai[b].size(): " << Ai[b].size();
 					policy[i]->get(b, etai, Ai[b]);
-//					std::cout << "Ai[b].size() = " << Ai[b].size() << std::endl; std::cout.flush();
+					std::cout << " -> " << Ai[b].size() << std::endl; std::cout.flush();
 				}
 			}
 
@@ -401,6 +474,126 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 	delete [] gammaAStar;
 
 	return policy;
+}
+
+PolicyAlphaVectors **LPBVI::compute_value_execute(StatesMap *S, ActionsMap *A,
+		ObservationsMap *Z, StateTransitions *T, ObservationTransitions *O,
+		FactoredRewards *R, Horizon *h, std::vector<float> &delta,
+		PolicyAlphaVectors *policy)
+{
+	// The final set of alpha vectors.
+	PolicyAlphaVectors **result = new PolicyAlphaVectors*[R->get_num_rewards()];
+	for (int i = 0; i < (int)R->get_num_rewards(); i++) {
+		result[i] = new PolicyAlphaVectors(h->get_horizon());
+	}
+
+	// Initialize the set of belief points to be the initial set. This must be a copy, since memory is managed
+	// for both objects independently.
+	for (BeliefState *b : initialB) {
+		B.push_back(new BeliefState(*b));
+	}
+
+	// Before anything, cache Gamma_{a, *} for all actions, but one for each R[i] now. This is used in every
+	// cross-sum computation, but it's alright that this doesn't depend on b and is over all actions, since we
+	// only ever use the ones with the action specified in the map. Since the inner loop only iterates over Ai[b]
+	// actions, it naturally restricts the actions.
+	std::map<Action *, std::vector<PolicyAlphaVector *> > *gammaAStar =
+			new std::map<Action *, std::vector<PolicyAlphaVector *> >[R->get_num_rewards()];
+	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
+		SARewards *Ri = dynamic_cast<SARewards *>(R->get(i));
+		if (Ri == nullptr) {
+			throw RewardException();
+		}
+
+		for (auto a : *A) {
+			Action *action = resolve(a);
+			gammaAStar[i][action].push_back(create_gamma_a_star(S, Z, T, O, Ri, action));
+		}
+	}
+
+	// If we are recording a belief point's values, create the empty vector for each R[i].
+	if (beliefToRecord != nullptr) {
+		recordedValues.clear();
+		recordedValues.resize(R->get_num_rewards());
+	}
+
+	// Actually run the bellman updates for each reward in sequence.
+	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
+		std::cout << "  R[" << i << "]" << std::endl; std::cout.flush();
+
+		// Create the set of alpha vectors, which we call Gamma. As well as the previous Gamma set.
+		std::vector<PolicyAlphaVector *> gamma[2];
+		bool current = false;
+
+		// Initialize the first set Gamma to be a set of zero alpha vectors.
+		for (unsigned int j = 0; j < B.size(); j++) {
+			PolicyAlphaVector *zeroAlphaVector = new PolicyAlphaVector();
+			for (auto s : *S) {
+//				zeroAlphaVector->set(resolve(s), Ri->get_min() / (1.0 - h->get_discount_factor()));
+				zeroAlphaVector->set(resolve(s), 0.0);
+			}
+			gamma[!current].push_back(zeroAlphaVector);
+		}
+
+		// Perform a predefined number of updates. Each update improves the value function estimate.
+		for (unsigned int u = 0; u < updates; u++) {
+			std::cout << "    " << (u + 1) << " / " << updates << std::endl; std::cout.flush();
+
+			// For each of the belief points, we must compute the optimal alpha vector.
+//			int beliefCounter = 0;
+			for (BeliefState *belief : B) {
+//				std::cout << "      " << (beliefCounter + 1) << " / " << B.size() << std::endl; std::cout.flush();
+//				beliefCounter++;
+
+				// Compute the alpha vector for this belief state's action following the policy.
+				Action *action = policy->get(belief);
+				PolicyAlphaVector *alphaBA = bellman_update_belief_state(S, Z, T, O, h,
+						gammaAStar[i][action], gamma[!current], action, belief);
+
+				gamma[current].push_back(alphaBA);
+			}
+
+			// If we are recording values, compute the belief value here.
+			if (beliefToRecord != nullptr) {
+				double maxRecordedValue = std::numeric_limits<double>::lowest();
+				for (PolicyAlphaVector *alphaRecord : gamma[current]) {
+					double recordedValue = alphaRecord->compute_value(beliefToRecord);
+					if (recordedValue > maxRecordedValue) {
+						maxRecordedValue = recordedValue;
+					}
+				}
+				recordedValues[i].push_back(maxRecordedValue);
+			}
+
+			// Prepare the next time step's gamma by clearing it. Remember again, we don't free the memory
+			// because policy manages the previous time step's gamma (above). If this is the first horizon,
+			// however, we actually do need to clear the set of zero alpha vectors.
+			for (PolicyAlphaVector *zeroAlphaVector : gamma[!current]) {
+				delete zeroAlphaVector;
+			}
+			gamma[!current].clear();
+			current = !current;
+		}
+
+		// Set the current gamma to the policy object. Note: This transfers the responsibility of
+		// memory management to the PolicyAlphaVectors object.
+		result[i]->set(gamma[!current]);
+	}
+
+	// Free the memory of Gamma_{a, *}.
+	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
+		for (auto a : *A) {
+			Action *action = resolve(a);
+			for (PolicyAlphaVector *alphaVector : gammaAStar[i][action]) {
+				delete alphaVector;
+			}
+			gammaAStar[i][action].clear();
+		}
+		gammaAStar[i].clear();
+	}
+	delete [] gammaAStar;
+
+	return result;
 }
 
 double LPBVI::compute_belief_density(StatesMap *S)

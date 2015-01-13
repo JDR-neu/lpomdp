@@ -87,7 +87,8 @@ public:
 	void set_belief_to_record(BeliefState *b);
 
 	/**
-	 * Get the recorded values of the belief state for all value functions.
+	 * Get the recorded values of the belief state for all value functions. These values are set
+	 * during both the "solve" function and
 	 * @return	The vector over time of each vector of values of the specified belief state.
 	 */
 	const std::vector<std::vector<double> > &get_recorded_values() const;
@@ -96,7 +97,7 @@ public:
 	 * Whether or not to constrain eta for theoretical guarantee.
 	 * @param	value	Constraint it or not.
 	 */
-	void constraint_eta(bool value);
+	void eta_constraint(bool value);
 
 	/**
 	 * Throw an error if they try to solve just a POMDP.
@@ -121,6 +122,22 @@ public:
 	 */
 	PolicyAlphaVectors **solve(LPOMDP *lpomdp);
 
+	/**
+	 * Compute the value of the belief states given a policy.
+	 * @param	pomdp							The LPOMDP to solve.
+	 * @param	policy							The policy mapping beliefs on the simplex to actions via their values.
+	 * @throw	StateException					The LPOMDP did not have a StatesMap states object.
+	 * @throw	ActionException					The LPOMDP did not have a ActionsMap actions object.
+	 * @throw	ObservationException			The LPOMDP did not have a ObservationsMap actions object.
+	 * @throw	StateTransitionsException		The LPOMDP did not have a StateTransitions state transitions object.
+	 * @throw	ObservationTransitionsException	The LPOMDP did not have a ObservationTransitions observation transitions object.
+	 * @throw	RewardException					The LPOMDP did not have a FactoredRewards (elements SARewards) rewards object.
+	 * @throw	CoreException					The LPOMDP was not infinite horizon.
+	 * @throw	PolicyException					An error occurred computing the policy.
+	 * @return	Return the alpha values for the policy provided.
+	 */
+	PolicyAlphaVectors **compute_value(LPOMDP *lpomdp, PolicyAlphaVectors *policy);
+
 protected:
 	/**
 	 * Solve an infinite horizon LMDP using value iteration.
@@ -132,14 +149,30 @@ protected:
 	 * @param	R					The factored state-action rewards.
 	 * @param	h					The horizon.
 	 * @param	delta				The slack vector.
-	 * @param	P					The vector of partitions.
-	 * @param	o					The vector of orderings.
 	 * @throw	PolicyException		An error occurred computing the policy.
 	 * @return	Return the optimal policy.
 	 */
 	virtual PolicyAlphaVectors **solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			ObservationsMap *Z, StateTransitions *T, ObservationTransitions *O,
 			FactoredRewards *R, Horizon *h, std::vector<float> &delta);
+	/**
+	 * Compute the value of a policy at the belief points.
+	 * @param	S					The finite states.
+	 * @param	A					The finite actions.
+	 * @param	Z					The finite observations.
+	 * @param	T					The finite state transition function.
+	 * @param	O					The finite observation transition function.
+	 * @param	R					The factored state-action rewards.
+	 * @param	h					The horizon.
+	 * @param	delta				The slack vector.
+	 * @param	policy				The policy mapping beliefs on the simplex to actions via their values.
+	 * @throw	PolicyException		An error occurred computing the policy.
+	 * @return	Return the optimal policy.
+	 */
+	virtual PolicyAlphaVectors **compute_value_execute(StatesMap *S, ActionsMap *A,
+			ObservationsMap *Z, StateTransitions *T, ObservationTransitions *O,
+			FactoredRewards *R, Horizon *h, std::vector<float> &delta,
+			PolicyAlphaVectors *policy);
 
 	/**
 	 * Compute the approximate density (an upper bound) of the belief points.

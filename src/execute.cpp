@@ -46,27 +46,18 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-//	losmLPOMDP->set_slack(0.0f, 0.0f);
-	losmLPOMDP->set_slack(200.0f, 0.0f);
+	losmLPOMDP->set_slack(0.0f, 0.0f);
 
 	LPBVI solver;
-	solver.constraint_eta(false);
+	solver.eta_constraint(false);
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
 	/*
 	solver.set_num_expansion_iterations(1); // No expansions!
 	solver.compute_num_update_iterations(losmLPOMDP, 1.0); // Within 1.0 of optimal answer!
 	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
 	//*/
-
-	//*
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(20);
-	//*/
-
-	/*
-	solver.set_num_expansion_iterations(10);
-	solver.set_num_update_iterations(100);
-	//*/
+	solver.set_num_update_iterations(10);
 
 
 
@@ -76,9 +67,6 @@ int main(int argc, char *argv[])
 
 	// TODO: Once you fix above, also in lpbvi.cpp at the initialization of zeroAlphaVector, use the
 	// R_min / (1 - gamma) instead of 0.
-
-
-	// NOTE: You stopped finding the policy at New York City.
 
 	// TODO: You need to compute the V^\pi value, and plot that. Currently, you are using the V^\eta values,
 	// which are detached from one another, namely the first one. Once you compute the correct value you
@@ -109,99 +97,72 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
-	// Add all states as perfect belief points; this is similar to an LMDP then.
-	/*
-	StatesMap *S = dynamic_cast<StatesMap *>(losmLPOMDP->get_states());
-	for (auto s : *S) {
-		LOSMState *state = dynamic_cast<LOSMState *>(resolve(s));
-		BeliefState *b = new BeliefState();
-		b->set(state, 1.0);
-		solver.add_initial_belief_state(b);
-	}
-	//*/
-
 	// Add uniform distribution over tiredness possibilities of states as belief points.
 	//*
 	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
 		// The size of statesVector is always 2 in our case.
 		BeliefState *b = nullptr;
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 1.0);
-//		b->set(statesVector[1], 0.0);
-//		solver.add_initial_belief_state(b);
-
 		b = new BeliefState();
-		b->set(statesVector[0], 0.75);
-		b->set(statesVector[1], 0.25);
-		solver.add_initial_belief_state(b);
-
-		b = new BeliefState();
-		b->set(statesVector[0], 0.5);
-		b->set(statesVector[1], 0.5);
-		solver.add_initial_belief_state(b);
-
-		b = new BeliefState();
-		b->set(statesVector[0], 0.25);
-		b->set(statesVector[1], 0.75);
+		b->set(statesVector[0], 1.0);
+		b->set(statesVector[1], 0.0);
 		solver.add_initial_belief_state(b);
 
 //		b = new BeliefState();
-//		b->set(statesVector[0], 0.0);
-//		b->set(statesVector[1], 1.0);
+//		b->set(statesVector[0], 0.75);
+//		b->set(statesVector[1], 0.25);
 //		solver.add_initial_belief_state(b);
-	}
-	//*/
 
-	// Add combinations of goal states as the belief points. We will instead run some expansions off of these.
-	/*
-	for (LOSMState *s : losmLPOMDP->get_goal_states()) {
-		BeliefState *b = new BeliefState();
-		b->set(s, 1.0);
+//		b = new BeliefState();
+//		b->set(statesVector[0], 0.5);
+//		b->set(statesVector[1], 0.5);
+//		solver.add_initial_belief_state(b);
+
+//		b = new BeliefState();
+//		b->set(statesVector[0], 0.25);
+//		b->set(statesVector[1], 0.75);
+//		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.0);
+		b->set(statesVector[1], 1.0);
 		solver.add_initial_belief_state(b);
 	}
 	//*/
 
 	PolicyAlphaVectors **policy = nullptr;
-//	try {
-		policy = solver.solve(losmLPOMDP);
-//	} catch (const CoreException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const StateException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const ActionException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const ObservationException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const StateTransitionException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const ObservationTransitionException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const RewardException &err) {
-//		std::cout << " Failure." << std::endl;
-//	} catch (const PolicyException &err) {
-//		std::cout << " Failure." << std::endl;
-//	}
+	policy = solver.solve(losmLPOMDP);
 	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
 
 	// After everything is computed, output the recorded values in a csv-like format to the screen.
-	std::cout << "Recorded Values:" << std::endl; std::cout.flush();
-	unsigned int i = 0;
+	std::cout << "V^eta(b^0):" << std::endl; std::cout.flush();
 	for (auto Vi : solver.get_recorded_values()) {
-//		std::cout << "V[" << i << "]:" << std::endl;
 		for (double Vit : Vi) {
 			std::cout << Vit << ",";
 		}
 		std::cout << std::endl; std::cout.flush();
-		i++;
+	}
+
+	// NOTE: We take the final collection of alpha vectors, hence policy[1].
+	PolicyAlphaVectors **result = nullptr;
+	result = solver.compute_value(losmLPOMDP, policy[1]);
+
+	// Now compute the actual values following the policy.
+	std::cout << "V^pi(b^0):" << std::endl; std::cout.flush();
+	for (auto Vi : solver.get_recorded_values()) {
+		for (double Vit : Vi) {
+			std::cout << Vit << ",";
+		}
+		std::cout << std::endl; std::cout.flush();
 	}
 
 	// Free the policy memory.
 	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {
 		delete [] policy[i];
+		delete [] result[i];
 	}
 	delete [] policy;
+	delete [] result;
 
 	return 0;
 }
