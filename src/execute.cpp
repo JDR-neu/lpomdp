@@ -46,9 +46,11 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	losmLPOMDP->set_slack(0.0f, 0.0f);
+//	losmLPOMDP->set_slack(0.0f, 0.0f);
+	losmLPOMDP->set_slack(200.0f, 0.0f);
 
 	LPBVI solver;
+	solver.constraint_eta(false);
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
 	/*
 	solver.set_num_expansion_iterations(1); // No expansions!
@@ -58,7 +60,7 @@ int main(int argc, char *argv[])
 
 	//*
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(15);
+	solver.set_num_update_iterations(20);
 	//*/
 
 	/*
@@ -125,10 +127,10 @@ int main(int argc, char *argv[])
 		// The size of statesVector is always 2 in our case.
 		BeliefState *b = nullptr;
 
-		b = new BeliefState();
-		b->set(statesVector[0], 1.0);
-		b->set(statesVector[1], 0.0);
-		solver.add_initial_belief_state(b);
+//		b = new BeliefState();
+//		b->set(statesVector[0], 1.0);
+//		b->set(statesVector[1], 0.0);
+//		solver.add_initial_belief_state(b);
 
 		b = new BeliefState();
 		b->set(statesVector[0], 0.75);
@@ -145,10 +147,10 @@ int main(int argc, char *argv[])
 		b->set(statesVector[1], 0.75);
 		solver.add_initial_belief_state(b);
 
-		b = new BeliefState();
-		b->set(statesVector[0], 0.0);
-		b->set(statesVector[1], 1.0);
-		solver.add_initial_belief_state(b);
+//		b = new BeliefState();
+//		b->set(statesVector[0], 0.0);
+//		b->set(statesVector[1], 1.0);
+//		solver.add_initial_belief_state(b);
 	}
 	//*/
 

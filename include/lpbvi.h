@@ -93,6 +93,12 @@ public:
 	const std::vector<std::vector<double> > &get_recorded_values() const;
 
 	/**
+	 * Whether or not to constrain eta for theoretical guarantee.
+	 * @param	value	Constraint it or not.
+	 */
+	void constraint_eta(bool value);
+
+	/**
 	 * Throw an error if they try to solve just a POMDP.
 	 * @param	pomdp				The partially observable Markov decision process to solve.
 	 * @throw	CoreException		This is a POMDP.
@@ -156,6 +162,11 @@ protected:
 	 * The recorded values of the belief state above over iteration for each value function.
 	 */
 	std::vector<std::vector<double> > recordedValues;
+
+	/**
+	 * Whether or not to constrain eta for theoretical guarantees.
+	 */
+	bool constrainEta;
 
 };
 

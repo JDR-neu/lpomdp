@@ -606,13 +606,27 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 		for (auto action : *A) {
 			IndexedAction *a = dynamic_cast<IndexedAction *>(resolve(action));
 
-			// If this is not a goal state, and the action taken was greater than the 2 * degree of this node,
-			// the
+			/*
+			// If this is not a goal state, and the action taken was greater than the 2 * degree of this node.
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
 				timeReward->set(s, a, s, floatMaxCuda);
 				autonomyReward->set(s, a, s, floatMaxCuda);
 				continue;
 			}
+			//*/
+
+			/*
+			// NOTE: The reason this will work is because all actions which are invalid will
+			// self-cycle, and the self-cycling will yield a value (-1) which is less than
+			// the value of the self-cycle at the goal (0).
+			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
+				timeReward->set(s, a, s, -1.0f);
+				autonomyReward->set(s, a, s, -1.0f);
+				continue;
+			}
+			//*/
+
+
 			/* ABOVE REPLACES THIS:
 			// Check if this is a self-transition, which is fine if the agent is in a goal
 			// state, but otherwise yields a large negative reward. This is how I am able to
@@ -627,12 +641,26 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 			}
 			//*/
 
+			/*
 			// If you got here, then s != sp, so any transition to a goal state is cost of 0 for the time reward.
 			if (s->is_goal()) {
 				timeReward->set(s, a, 0.0);
 				autonomyReward->set(s, a, 0.0);
 				continue;
 			}
+			//*/
+
+
+			//*
+			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
+				timeReward->set(s, a, s, floatMaxCuda);
+			} else if (s->is_goal()) {
+				timeReward->set(s, a, 0.0);
+			} else {
+				timeReward->set(s, a, -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
+			}
+			//*/
+
 
 			// Enabling or disabling autonomy changes the speed of the car, but provides
 			// a positive reward for safely driving autonomously, regardless of the
@@ -640,15 +668,55 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 //			if (sp->get_autonomy()) {
 //				timeReward->set(s, a, sp, -sp->get_distance() / (sp->get_speed_limit() * AUTONOMY_SPEED_LIMIT_FACTOR) * TO_SECONDS);
 //			} else {
-				timeReward->set(s, a, -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
+//				timeReward->set(s, a, -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
 //			}
 
-			if (!s->get_autonomy() && s->get_tiredness() > 0) {
-//					if (sp->is_autonomy_capable() && !sp->get_autonomy() && sp->get_tiredness() > 0) {
+
+			//*
+			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
+				autonomyReward->set(s, a, s, floatMaxCuda);
+			} else if (s->is_goal()) {
+				autonomyReward->set(s, a, 0.0);
+			} else if (s->is_autonomy_capable() && !s->get_autonomy()) {
+				autonomyReward->set(s, a, s, floatMaxCuda);
+			} else if (successors[s][a->get_index()]->is_autonomy_capable() && !successors[s][a->get_index()]->get_autonomy()) {
 				autonomyReward->set(s, a, -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
 			} else {
 				autonomyReward->set(s, a, -INTERSECTION_WAIT_TIME_IN_SECONDS);
 			}
+			//*/
+
+
+			/* Not quite.
+			if (s->get_autonomy() && successors[s][a->get_index()]->get_autonomy()) {
+				autonomyReward->set(s, a, 1.0);
+			} else if (s->get_tiredness() > 0) {
+				autonomyReward->set(s, a, -1.0);
+			} else {
+				autonomyReward->set(s, a, 0.0);
+			}
+			//*/
+
+			/* Experiment...
+			if (s->get_autonomy() && s->get_tiredness() > 0) {
+//					if (sp->is_autonomy_capable() && !sp->get_autonomy() && sp->get_tiredness() > 0) {
+				autonomyReward->set(s, a, -2.0);
+			} else if (s->get_autonomy() && s->get_tiredness() == 0) {
+				autonomyReward->set(s, a, -1.0);
+			} else if (!s->get_autonomy() && s->get_tiredness() > 0) {
+				if (s->is_autonomy_capable()) {
+					autonomyReward->set(s, a, -5.0);
+				} else {
+					autonomyReward->set(s, a, -4.0);
+				}
+			} else if (!s->get_autonomy() && s->get_tiredness() == 0) {
+				if (s->is_autonomy_capable()) {
+					autonomyReward->set(s, a, -3.0);
+				} else {
+					autonomyReward->set(s, a, -3.0);
+				}
+			}
+			//*/
 
 //			OLD CODE
 //			for (auto statePrime : *S) {

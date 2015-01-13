@@ -54,12 +54,14 @@
 LPBVI::LPBVI() : POMDPPBVI()
 {
 	beliefToRecord = nullptr;
+	constrainEta = false;
 }
 
 LPBVI::LPBVI(POMDPPBVIExpansionRule expansionRule, unsigned int updateIterations,
 		unsigned int expansionIterations) : POMDPPBVI(expansionRule, updateIterations, expansionIterations)
 {
 	beliefToRecord = nullptr;
+	constrainEta = false;
 }
 
 LPBVI::~LPBVI()
@@ -112,6 +114,11 @@ void LPBVI::set_belief_to_record(BeliefState *b)
 const std::vector<std::vector<double> > &LPBVI::get_recorded_values() const
 {
 	return recordedValues;
+}
+
+void LPBVI::constraint_eta(bool value)
+{
+	constrainEta = value;
 }
 
 PolicyAlphaVectors *LPBVI::solve(POMDP *pomdp)
@@ -330,8 +337,12 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			policy[i]->set(gamma[!current]);
 
 			// Setup the one-step slack eta_i value.
-			double epsiloni = (Ri->get_max() - Ri->get_min()) / (1.0 - h->get_discount_factor()) * deltaB;
-			double etai = std::max(0.0, (1.0 - h->get_discount_factor()) * delta[i] - epsiloni);
+			double etai = delta[i];
+
+			if (constrainEta) {
+				double epsiloni = (Ri->get_max() - Ri->get_min()) / (1.0 - h->get_discount_factor()) * deltaB;
+				etai = std::max(0.0, (1.0 - h->get_discount_factor()) * delta[i] - epsiloni);
+			}
 
 			// Restrict the set of actions available to each belief point in the next i+1 value function.
 			if (i < R->get_num_rewards() - 1) {
@@ -347,31 +358,33 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		}
 
 		// Perform an expansion based on the rule the user wishes to use.
-		switch (rule) {
-		case POMDPPBVIExpansionRule::NONE:
-			e = expansions; // Stop immediately if the user does not want to expand.
-			break;
-		case POMDPPBVIExpansionRule::RANDOM_BELIEF_SELECTION:
-			expand_random_belief_selection(S);
-			break;
-		case POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_RANDOM_ACTION:
-			expand_stochastic_simulation_random_actions(S, A, Z, T, O);
-			break;
-//		case POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_GREEDY_ACTION:
-			// NOTE: This one is a bit harder, since gamma is inside another loop now, but this is outside
-			// that loop... Just ignore it for now, and use the one below.
-//			expand_stochastic_simulation_greedy_action(S, A, Z, T, O, gamma[!current]);
-//			break;
-		case POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION:
-			expand_stochastic_simulation_exploratory_action(S, A, Z, T, O);
-			break;
-		case POMDPPBVIExpansionRule::GREEDY_ERROR_REDUCTION:
-			expand_greedy_error_reduction();
-			break;
-		default:
-			throw PolicyException();
-			break;
-		};
+		if (e < expansions - 1) {
+			switch (rule) {
+			case POMDPPBVIExpansionRule::NONE:
+				e = expansions; // Stop immediately if the user does not want to expand.
+				break;
+			case POMDPPBVIExpansionRule::RANDOM_BELIEF_SELECTION:
+				expand_random_belief_selection(S);
+				break;
+			case POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_RANDOM_ACTION:
+				expand_stochastic_simulation_random_actions(S, A, Z, T, O);
+				break;
+	//		case POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_GREEDY_ACTION:
+				// NOTE: This one is a bit harder, since gamma is inside another loop now, but this is outside
+				// that loop... Just ignore it for now, and use the one below.
+	//			expand_stochastic_simulation_greedy_action(S, A, Z, T, O, gamma[!current]);
+	//			break;
+			case POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION:
+				expand_stochastic_simulation_exploratory_action(S, A, Z, T, O);
+				break;
+			case POMDPPBVIExpansionRule::GREEDY_ERROR_REDUCTION:
+				expand_greedy_error_reduction();
+				break;
+			default:
+				throw PolicyException();
+				break;
+			};
+		}
 	}
 
 	// Free the memory of Gamma_{a, *}.
