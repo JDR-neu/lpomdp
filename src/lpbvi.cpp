@@ -284,6 +284,8 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		B.push_back(new BeliefState(*b));
 	}
 
+	std::cout << "Initial Num Belief Points: " << initialB.size() << std::endl; std::cout.flush();
+
 	// Before anything, cache Gamma_{a, *} for all actions, but one for each R[i] now. This is used in every
 	// cross-sum computation, but it's alright that this doesn't depend on b and is over all actions, since we
 	// only ever use the ones with the action specified in the map. Since the inner loop only iterates over Ai[b]

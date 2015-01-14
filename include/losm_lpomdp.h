@@ -44,7 +44,7 @@
 
 #define NUM_TIREDNESS_LEVELS 2
 
-#define INTERSECTION_WAIT_TIME_IN_SECONDS 5.0
+#define INTERSECTION_WAIT_TIME_IN_SECONDS 0.1
 #define AUTONOMY_SPEED_LIMIT_THRESHOLD 30.0
 #define AUTONOMY_SPEED_LIMIT_FACTOR 0.9
 
@@ -109,6 +109,21 @@ public:
 	 * @return	Returns true if an error arose, and false otherwise.
 	 */
 	bool save_policy(PolicyAlphaVectors **policy, unsigned int k, std::string filename);
+
+	/**
+	 * Save a PolicyAlphaVectors object to the custom format required by the visualizer.
+	 * This assumes infinite horizon, and a particular belief probability over attentive / tired.
+	 * @param	policy			The policy represented as alpha-vectors, one for each value
+	 * 							function, mapping beliefs to actions.
+	 * @param	k				The number of value functions.
+	 * @param	tirednessBelief	The belief value for if the driver is fatigued or not. This
+	 * 							adjusts the output of saving, instead referring to tired as
+	 * 							the policy for tirednessBelief, and attentive as the policy
+	 * 							for 1 - tirednessBelief.
+	 * @param	filename		The name of the file to save.
+	 * @return	Returns true if an error arose, and false otherwise.
+	 */
+	bool save_policy(PolicyAlphaVectors **policy, unsigned int k, double tirednessBelief, std::string filename);
 
 	/**
 	 * Get the initial state, as defined by the constructor's two UIDs.

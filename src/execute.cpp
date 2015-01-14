@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
 	//*/
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(10);
+	solver.set_num_update_iterations(15);
 
 
 
@@ -108,20 +108,20 @@ int main(int argc, char *argv[])
 		b->set(statesVector[1], 0.0);
 		solver.add_initial_belief_state(b);
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 0.75);
-//		b->set(statesVector[1], 0.25);
-//		solver.add_initial_belief_state(b);
+		b = new BeliefState();
+		b->set(statesVector[0], 0.75);
+		b->set(statesVector[1], 0.25);
+		solver.add_initial_belief_state(b);
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 0.5);
-//		b->set(statesVector[1], 0.5);
-//		solver.add_initial_belief_state(b);
+		b = new BeliefState();
+		b->set(statesVector[0], 0.5);
+		b->set(statesVector[1], 0.5);
+		solver.add_initial_belief_state(b);
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 0.25);
-//		b->set(statesVector[1], 0.75);
-//		solver.add_initial_belief_state(b);
+		b = new BeliefState();
+		b->set(statesVector[0], 0.25);
+		b->set(statesVector[1], 0.75);
+		solver.add_initial_belief_state(b);
 
 		b = new BeliefState();
 		b->set(statesVector[0], 0.0);
@@ -132,7 +132,8 @@ int main(int argc, char *argv[])
 
 	PolicyAlphaVectors **policy = nullptr;
 	policy = solver.solve(losmLPOMDP);
-	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
+//	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
+	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), 0.25, argv[8]);
 
 	// After everything is computed, output the recorded values in a csv-like format to the screen.
 	std::cout << "V^eta(b^0):" << std::endl; std::cout.flush();

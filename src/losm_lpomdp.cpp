@@ -84,19 +84,6 @@ void LOSMPOMDP::set_slack(float d1, float d2)
 }
 
 
-// ************************************************************************************
-// ************************************************************************************
-// ************************************************************************************
-
-// NOTE: THIS IS KIND OF INCORRECT. The action returned only matches the truth if the belief set used in
-// LPBVI included all the states, since the final alpha vector (at k-1) only has perfectly restricted actions
-// at those belief points.
-
-// ************************************************************************************
-// ************************************************************************************
-// ************************************************************************************
-
-
 bool LOSMPOMDP::save_policy(PolicyAlphaVectors **policy, unsigned int k, std::string filename)
 {
 	StatesMap *S = dynamic_cast<StatesMap *>(states);
@@ -122,6 +109,91 @@ bool LOSMPOMDP::save_policy(PolicyAlphaVectors **policy, unsigned int k, std::st
 		file << ls->get_autonomy() << ",";
 		file << successors.at(ls).at(ia->get_index())->get_previous_step()->get_uid() << ",";
 		file << successors.at(ls).at(ia->get_index())->get_autonomy() << ",";
+		for (unsigned int i = 0; i < k; i++) {
+			file << policy[i]->compute_value(&b);
+			if (i != k - 1) {
+				file << ",";
+			}
+		}
+		file << std::endl;
+	}
+
+	file.close();
+
+	return false;
+}
+
+bool LOSMPOMDP::save_policy(PolicyAlphaVectors **policy, unsigned int k, double tirednessBelief, std::string filename)
+{
+	std::ofstream file(filename);
+	if (!file.is_open()) {
+		return true;
+	}
+
+	for (auto tirednessStateElements : tirednessStates) {
+		BeliefState b;
+
+		Action *a = nullptr;
+		IndexedAction *ia = nullptr;
+
+		LOSMState *ls0 = nullptr;
+		LOSMState *ls1 = nullptr;
+
+		ls0 = dynamic_cast<LOSMState *>(tirednessStateElements[0]);
+
+		// We check if this is the tired state between the two. Either way, assign
+		// the belief such that the tired one has the value "tirednessBelief" for
+		// the probability.
+		if (ls0->get_tiredness() > 0) {
+			// The 0th state is the one with tiredness score > 0, hence tired.
+			b.set(tirednessStateElements[0], tirednessBelief);
+			b.set(tirednessStateElements[1], 1.0 - tirednessBelief);
+		} else {
+			// The 0th state is the one with tiredness score == 0, hence attentive.
+			b.set(tirednessStateElements[0], 1.0 - tirednessBelief);
+			b.set(tirednessStateElements[1], tirednessBelief);
+		}
+
+		a = policy[k - 1]->get(&b);
+		ia = dynamic_cast<IndexedAction *>(a);
+
+		file << ls0->get_current_step()->get_uid() << ",";
+		file << ls0->get_current()->get_uid() << ",";
+		file << ls0->get_tiredness() << ",";
+		file << ls0->get_autonomy() << ",";
+		file << successors.at(ls0).at(ia->get_index())->get_previous_step()->get_uid() << ",";
+		file << successors.at(ls0).at(ia->get_index())->get_autonomy() << ",";
+		for (unsigned int i = 0; i < k; i++) {
+			file << policy[i]->compute_value(&b);
+			if (i != k - 1) {
+				file << ",";
+			}
+		}
+		file << std::endl;
+
+		ls1 = dynamic_cast<LOSMState *>(tirednessStateElements[1]);
+
+		// Here, we do the opposite belief. This lets us render both parts
+		// in place of the extreme 1.0 beliefs.
+		if (ls0->get_tiredness() > 0) {
+			// The 0th state is the one with tiredness score > 0, hence tired.
+			b.set(tirednessStateElements[0], 1.0 - tirednessBelief);
+			b.set(tirednessStateElements[1], tirednessBelief);
+		} else {
+			// The 0th state is the one with tiredness score == 0, hence attentive.
+			b.set(tirednessStateElements[0], tirednessBelief);
+			b.set(tirednessStateElements[1], 1.0 - tirednessBelief);
+		}
+
+		a = policy[k - 1]->get(&b);
+		ia = dynamic_cast<IndexedAction *>(a);
+
+		file << ls1->get_current_step()->get_uid() << ",";
+		file << ls1->get_current()->get_uid() << ",";
+		file << ls1->get_tiredness() << ",";
+		file << ls1->get_autonomy() << ",";
+		file << successors.at(ls1).at(ia->get_index())->get_previous_step()->get_uid() << ",";
+		file << successors.at(ls1).at(ia->get_index())->get_autonomy() << ",";
 		for (unsigned int i = 0; i < k; i++) {
 			file << policy[i]->compute_value(&b);
 			if (i != k - 1) {
@@ -651,13 +723,17 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 			//*/
 
 
-			//*
+			double basePenalty = -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS;
+			double epsilonPenalty = -INTERSECTION_WAIT_TIME_IN_SECONDS;
+
+
+			//* The Best One For Time Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
 				timeReward->set(s, a, s, floatMaxCuda);
 			} else if (s->is_goal()) {
 				timeReward->set(s, a, 0.0);
 			} else {
-				timeReward->set(s, a, -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
+				timeReward->set(s, a, basePenalty);
 			}
 			//*/
 
@@ -672,18 +748,54 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 //			}
 
 
-			//*
+			//* The Best One For Autonomy Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				autonomyReward->set(s, a, s, floatMaxCuda);
+				autonomyReward->set(s, a, floatMaxCuda);
 			} else if (s->is_goal()) {
 				autonomyReward->set(s, a, 0.0);
-			} else if (s->is_autonomy_capable() && !s->get_autonomy()) {
-				autonomyReward->set(s, a, s, floatMaxCuda);
-			} else if (successors[s][a->get_index()]->is_autonomy_capable() && !successors[s][a->get_index()]->get_autonomy()) {
-				autonomyReward->set(s, a, -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
+			} else if (s->get_tiredness() > 0) {
+				if (s->get_autonomy()) {
+					autonomyReward->set(s, a, epsilonPenalty);
+				} else {
+					autonomyReward->set(s, a, basePenalty);
+				}
 			} else {
-				autonomyReward->set(s, a, -INTERSECTION_WAIT_TIME_IN_SECONDS);
+				if (s->is_autonomy_capable() && !s->get_autonomy()) {
+					autonomyReward->set(s, a, basePenalty);
+				} else {
+					autonomyReward->set(s, a, epsilonPenalty);
+				}
 			}
+
+			/*
+			else if (successors[s][a->get_index()]->get_tiredness() > 0) {
+				if (successors[s][a->get_index()]->is_autonomy_capable()) {
+					// Action produces a state which IS autonomy-capable. So, check if the action enabled it.
+					if (successors[s][a->get_index()]->get_autonomy()) {
+						// It correctly enabled autonomy, so just penalize normally.
+						autonomyReward->set(s, a, basePenalty);
+					} else {
+						// It was an idiot and did not enable it, so add an epsilon penalty to the base penalty.
+						autonomyReward->set(s, a, basePenalty + epsilonPenalty);
+					}
+				} else {
+					// Action produces a state which is NOT autonomy-capable. Thus, base penalty with an epsilon penalty.
+					autonomyReward->set(s, a, basePenalty + epsilonPenalty);
+				}
+			} else {
+				// 1. A valid action.
+				// 2. Not a goal state.
+				// 3. Next state is attentive.
+				// Therefore, just penalize based on distance, except give an extra penalty if the agent
+				// doesn't choose drive autonomously on an autonomous-capable road, versus the choice to
+				// drive not autonomously. This basically just breaks ties.
+				if (successors[s][a->get_index()]->is_autonomy_capable() && successors[s][a->get_index()]->get_autonomy()) {
+					autonomyReward->set(s, a, basePenalty);
+				} else {
+					autonomyReward->set(s, a, basePenalty + epsilonPenalty);
+				}
+			}
+			*/
 			//*/
 
 
@@ -809,7 +921,7 @@ void LOSMPOMDP::create_misc(LOSM *losm)
 //	initialState = new Initial(S->get(0));
 
 	// Infinite horizon with a discount factor of 0.9.
-	horizon = new Horizon(0.99);
+	horizon = new Horizon(0.9);
 
 	std::cout << "Done Misc!" << std::endl; std::cout.flush();
 }
