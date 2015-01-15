@@ -50,20 +50,20 @@
  * @param	gamma		The discount factor in [0.0, 1.0).
  * @param	horizon		How many time steps to iterate.
  * @param	numBlocks	The number of CUDA blocks. Ensure that numBlocks * numThreads >= n.
- * @param	numThreads	The number of CUDA threads per block. Use 128, 256, or 512 (multiples of 32).
- * @param	d_Gamma		The resultant policy; set of alpha vectors.
- * @param	d_pi		The resultant policy; one action for each alpha-vector (an n-array).
- * 						This will be modified. (Device-side pointer.)
+ * @param	numThreads	The number of CUDA threads per block. Use 128, 256, 512, or 1024 (multiples of 32).
+ * @param	Gamma		The resultant policy; set of alpha vectors. This will be modified.
+ * @param	pi			The resultant policy; one action for each alpha-vector (an n-array).
+ * 						This will be modified.
  * @return	Returns 0 upon success; -1 if invalid arguments were passed; -2 if the number
  * 			of blocks and threads is less than the number of states; -3 if an error with
  * 			the CUDA functions arose.
  */
 int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		const bool *d_A, const float *d_B,
-		const float *d_T, const float *d_R,
+		const float *d_T, const float *d_O, const float *d_R,
 		float Rmin, float Rmax, float gamma, unsigned int horizon,
 		unsigned int numBlocks, unsigned int numThreads,
-		float *d_Gamma, unsigned int *d_pi);
+		float *Gamma, unsigned int *pi);
 
 /**
  * Initialize CUDA by transferring all of the constant LPOMDP model information to the device.
@@ -77,7 +77,7 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
  * @return	Returns 0 upon success; -1 if invalid arguments were passed; -3 if an error with
  * 			the CUDA functions arose.
  */
-int lpbvi_initialize_actions(unsigned int m, unsigned int r, const float *A, float *&d_A);
+int lpbvi_initialize_actions(unsigned int m, unsigned int r, const bool *A, bool *&d_A);
 
 /**
  * Initialize CUDA by transferring all of the constant LPOMDP model information to the device.
@@ -89,7 +89,7 @@ int lpbvi_initialize_actions(unsigned int m, unsigned int r, const float *A, flo
  * @return	Returns 0 upon success; -1 if invalid arguments were passed; -3 if an error with
  * 			the CUDA functions arose.
  */
-int lpbvi_initialize_belief_points(unsigned int n, unsigned int m, const float *B, float *&d_B);
+int lpbvi_initialize_belief_points(unsigned int n, unsigned int r, const float *B, float *&d_B);
 
 /**
  * Initialize CUDA by transferring all of the constant LPOMDP model information to the device.
@@ -111,7 +111,7 @@ int lpbvi_initialize_state_transitions(unsigned int n, unsigned int m, const flo
  * @param	z			The number of observations.
  * @param	O			A mapping of action-state-observation triples (m-n-z array) to a
  * 						transition probability.
- * @param	d_T			A mapping of action-state-observation triples (m-n-z array) to a
+ * @param	d_O			A mapping of action-state-observation triples (m-n-z array) to a
  * 						transition probability. (Device-side pointer.)
  * @return	Returns 0 upon success; -1 if invalid arguments were passed; -3 if an error with
  * 			the CUDA functions arose.
@@ -131,18 +131,35 @@ int lpbvi_initialize_observation_transitions(unsigned int n, unsigned int m, uns
 int lpbvi_initialize_rewards(unsigned int n, unsigned int m, const float *R, float *&d_R);
 
 /**
+ * Initialize CUDA by transferring all of the constant LPOMDP model information to the device.
+ * @param	n				The number of states.
+ * @param	m				The number of actions, in total, that are possible.
+ * @param	GammaAStar		A vector of size n for each action (m-n array).
+ * @param	d_GammaAStar	A vector of size n for each action (m-n array).
+ * 							(Device-side pointer.)
+ * @return	Returns 0 upon success; -1 if invalid arguments were passed; -3 if an error with
+ * 			the CUDA functions arose.
+ */
+int lpbvi_initialize_gamma_a_star(unsigned int n, unsigned int m, const float *GammaAStar, float *&d_GammaAStar);
+
+/**
  * Uninitialize CUDA by freeing all of the constant MDP model information on the device.
- * @param	d_T			A mapping of state-action-state triples (n-m-n array) to a
- * 						transition probability. (Device-side pointer.)
- * @param	d_O			A mapping of action-state-observation triples (m-n-z array) to a
- * 						transition probability. (Device-side pointer.)
- * @param	d_R			A mapping of state-action pairs (n-m array) to a reward.
- * 						(Device-side pointer.)
- * @param	d_pi		The resultant policy, mapping every state (n array) to an
- * 						action (in 0 to m-1). (Device-side pointer.)
+ * @param	d_A				A belief-action matrix (r-m array) of booleans, which state
+ * 							if an action is available at the corresponding belief point.
+ * 							(Device-side pointer.)
+ * @param	d_B				A r-n array, consisting of r sets of n-vector belief distributions.
+ *  						(Device-side pointer.)
+ * @param	d_T				A mapping of state-action-state triples (n-m-n array) to a
+ * 							transition probability. (Device-side pointer.)
+ * @param	d_O				A mapping of action-state-observation triples (m-n-z array) to a
+ * 							transition probability. (Device-side pointer.)
+ * @param	d_R				A mapping of state-action pairs (n-m array) to a reward.
+ * 							(Device-side pointer.)
+ * @param	d_GammaAStar	A vector of size n for each action (m-n array).
+ * 							(Device-side pointer.)
  * @return	Returns 0 upon success.
  */
-int lpbvi_uninitialize(float *&d_T, float *&d_O, float *&d_R, unsigned int *&d_pi);
+int lpbvi_uninitialize(bool *&d_A, float *&d_B, float *&d_T, float *&d_O, float *&d_R, float *&d_GammaAStar);
 
 
 #endif // LPBVI_CUDA_H
