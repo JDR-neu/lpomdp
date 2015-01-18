@@ -22,8 +22,8 @@
  */
 
 
-#ifndef LPBVI_H
-#define LPBVI_H
+#ifndef LPBVI_CUDA_H
+#define LPBVI_CUDA_H
 
 
 #include "lpomdp.h"
@@ -45,67 +45,30 @@
 #include <unordered_map>
 
 /**
- * Solve a Lexicographic Partially Observable Markov Decision Process (LMDP).
+ * Solve a Lexicographic Partially Observable Markov Decision Process (LMDP) using CUDA.
  */
-class LPBVI : public POMDPPBVI {
+class LPBVICuda : public LPBVI {
 public:
 	/**
-	 * The default constructor for the LPBVI class. Default number of iterations for infinite
+	 * The default constructor for the LPBVICuda class. Default number of iterations for infinite
 	 * horizon POMDPs is 1. The default expansion rule is Random Belief Selection.
 	 */
-	LPBVI();
+	LPBVICuda();
 
 	/**
-	 * A constructor for the LPBVI class which allows for the specification of the expansion rule,
+	 * A constructor for the LPBVICuda class which allows for the specification of the expansion rule,
 	 * and the number of iterations (both updates and expansions) to run for infinite horizon.
 	 * The default is 1 for both.
 	 * @param	expansionRule			The expansion rule to use.
 	 * @param	updateIterations 		The number of update iterations to run for infinite horizon POMDPs.
 	 * @param	expansionIterations 	The number of expansion iterations to run for infinite horizon POMDPs.
 	 */
-	LPBVI(POMDPPBVIExpansionRule expansionRule, unsigned int updateIterations, unsigned int expansionIterations);
+	LPBVICuda(POMDPPBVIExpansionRule expansionRule, unsigned int updateIterations, unsigned int expansionIterations);
 
 	/**
-	 * The deconstructor for the LPBVI class. This method frees all the belief state memory.
+	 * The deconstructor for the LPBVICuda class. This method frees all the belief state memory.
 	 */
-	virtual ~LPBVI();
-
-	/**
-	 * Compute the optimal number of update iterations to run for infinite horizon POMDPs, given
-	 * the desired tolerance, requiring knowledge of the reward function. This selects the maximum over
-	 * all of the rewards.
-	 * @param	pomdp 				The partially observable Markov decision process to use. Must be an LPOMDP.
-	 * @param	epsilon				The desired tolerance between value functions to check for convergence.
-	 * @throw	RewardException		The POMDP did not have a SARewards rewards object.
-	 */
-	void compute_num_update_iterations(POMDP *pomdp, double epsilon);
-
-	/**
-	 * Setup the belief state to record over iterations.
-	 * @param	b	The belief state to record.
-	 */
-	void set_belief_to_record(BeliefState *b);
-
-	/**
-	 * Get the recorded values of the belief state for all value functions. These values are set
-	 * during both the "solve" function and
-	 * @return	The vector over time of each vector of values of the specified belief state.
-	 */
-	const std::vector<std::vector<double> > &get_recorded_values() const;
-
-	/**
-	 * Whether or not to constrain eta for theoretical guarantee.
-	 * @param	value	Constraint it or not.
-	 */
-	void eta_constraint(bool value);
-
-	/**
-	 * Throw an error if they try to solve just a POMDP.
-	 * @param	pomdp				The partially observable Markov decision process to solve.
-	 * @throw	CoreException		This is a POMDP.
-	 * @return	Return null.
-	 */
-	virtual PolicyAlphaVectors *solve(POMDP *pomdp);
+	virtual ~LPBVICuda();
 
 	/**
 	 * Solve the LPOMDP provided using lexicographic point-based value iteration.
@@ -120,7 +83,7 @@ public:
 	 * @throw	PolicyException					An error occurred computing the policy.
 	 * @return	Return the optimal policy, one set of alpha vectors for each value function.
 	 */
-	virtual PolicyAlphaVectors **solve(LPOMDP *lpomdp);
+	PolicyAlphaVectors **solve(LPOMDP *lpomdp);
 
 	/**
 	 * Compute the value of the belief states given a policy.
@@ -136,7 +99,7 @@ public:
 	 * @throw	PolicyException					An error occurred computing the policy.
 	 * @return	Return the alpha values for the policy provided.
 	 */
-	virtual PolicyAlphaVectors **compute_value(LPOMDP *lpomdp, PolicyAlphaVectors *policy);
+	PolicyAlphaVectors **compute_value(LPOMDP *lpomdp, PolicyAlphaVectors *policy);
 
 protected:
 	/**
@@ -175,33 +138,23 @@ protected:
 			PolicyAlphaVectors *policy);
 
 	/**
-	 * Compute the approximate density (an upper bound) of the belief points.
-	 * @param	S	The set of states.
-	 * @return	The approximate density (an upper bound).
-	 */
-	virtual double compute_belief_density(StatesMap *S);
-
-	/**
 	 * Reset the internal variables.
 	 */
 	virtual void reset();
 
 	/**
-	 * The belief state to record.
+	 * The device-side pointer to the memory location of state transitions.
 	 */
-	BeliefState *beliefToRecord;
+	float *d_T;
 
 	/**
-	 * The recorded values of the belief state above over iteration for each value function.
+	 * The device-side pointer to the memory location of rewards, one for each reward.
 	 */
-	std::vector<std::vector<double> > recordedValues;
+	float **d_R;
 
-	/**
-	 * Whether or not to constrain eta for theoretical guarantees.
-	 */
-	bool constrainEta;
+
 
 };
 
 
-#endif // LPBVI_H
+#endif // LPBVI_CUDA_H
