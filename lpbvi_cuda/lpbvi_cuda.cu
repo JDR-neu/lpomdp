@@ -115,64 +115,71 @@ __global__ void lpbvi_update(unsigned int n, unsigned int m, unsigned int z, uns
 	// GammaAStar value. Since we will dot-product this with the belief, we will just do that here.
 
 	// We want to find the action that maximizes the value, store it in piPrime, as well as its alpha-vector GammaPrime.
-	float maxActionValue = 0.0f;
+	float maxActionValue = FLT_MIN;
 
 	for (unsigned int action = 0; action < m; action++) {
-		float actionValue = 0.0f;
+		// Only execute if the action is available.
+		if (A[beliefIndex * m + action]) {
+			// Compute Gamma_{a,*} and set it to the first value of alphaBA.
+			for (unsigned int s = 0; s < n; s++) {
+				alphaBA[beliefIndex * n + s] = R[s * m + action];
+			}
 
-		// Compute Gamma_{a,*} and set it to the first value of alphaBA.
-		for (unsigned int s = 0; s < n; s++) {
-			alphaBA[beliefIndex * n + s] = R[s * m + action];
-		}
+			// Since the bottleneck is almost always read access to global memory, write access is fine here. We will
+			// overwrite old alpha-vector values if this iteration is better than previous ones.
+			for (unsigned int observation = 0; observation < z; observation++) {
+				// Compute the max alpha vector from Gamma, given the fixed action and observation.
+				float maxAlphaDotBeta = 0.0f;
+				unsigned int maxAlphaIndex = 0;
 
-		// Since the bottleneck is almost always read access to global memory, write access is fine here. We will
-		// overwrite old alpha-vector values if this iteration is better than previous ones.
-		for (unsigned int observation = 0; observation < z; observation++) {
-			// Compute the max alpha vector from Gamma, given the fixed action and observation.
-			float maxAlphaDotBeta = 0.0f;
-			unsigned int maxAlphaIndex = 0;
+				for (unsigned int alphaIndex = 0; alphaIndex < r; alphaIndex++) {
+					float alphaDotBeta = 0.0f;
 
-			for (unsigned int alphaIndex = 0; alphaIndex < r; alphaIndex++) {
-				float alphaDotBeta = 0.0;
+					for (unsigned int s = 0; s < n; s++) {
+						// We compute the value of this state in the alpha-vector, then multiply it by the belief, and add it to
+						// the current dot product value for this alpha-vector.
+						float value = 0.0f;
+						for (unsigned int sp = 0; sp < n; sp++) {
+							value += T[s * m * n + action * n + sp] * O[action * n * z + sp * z + observation] * Gamma[alphaIndex * n + sp];
+						}
+						alphaDotBeta += gamma * value * B[beliefIndex * n + s];
+					}
 
+					// Store the maximal value and index.
+					if (alphaIndex == 0 || alphaDotBeta > maxAlphaDotBeta) {
+						maxAlphaDotBeta = alphaDotBeta;
+						maxAlphaIndex = alphaIndex;
+					}
+				}
+
+				// Now we can compute the alpha-vector component for this observation, since we have the max.
+				// We will need to compute the dot product anyway, so let's just distribute the belief over the
+				// sum over observations, and add it all up here.
 				for (unsigned int s = 0; s < n; s++) {
 					// We compute the value of this state in the alpha-vector, then multiply it by the belief, and add it to
 					// the current dot product value for this alpha-vector.
-					float value;
+					float value = 0.0f;
 					for (unsigned int sp = 0; sp < n; sp++) {
-						value += T[s * m * n + action * n + sp] * O[action * n * z + sp * z + observation] * Gamma[alphaIndex * n + sp];
+						value += T[s * m * n + action * n + sp] * O[action * n * z + sp * z + observation] * Gamma[maxAlphaIndex * n + sp];
 					}
-					alphaDotBeta += gamma * value * B[beliefIndex * n + s];
-				}
-
-				// Store the maximal value and index.
-				if (alphaIndex == 0 || alphaDotBeta > maxAlphaDotBeta) {
-					maxAlphaDotBeta = alphaDotBeta;
-					maxAlphaIndex = alphaIndex;
+					alphaBA[beliefIndex * n + s] += gamma * value;
 				}
 			}
 
-			// Now we can compute the alpha-vector component for this observation, since we have the max.
-			// We will need to compute the dot product anyway, so let's just distribute the belief over the
-			// sum over observations, and add it all up here.
+			// Once the potential alpha-vector has been computed, compute the value with respect to the belief state.
+			float actionValue = 0.0f;
 			for (unsigned int s = 0; s < n; s++) {
-				// We compute the value of this state in the alpha-vector, then multiply it by the belief, and add it to
-				// the current dot product value for this alpha-vector.
-				float value;
-				for (unsigned int sp = 0; sp < n; sp++) {
-					value += T[s * m * n + action * n + sp] * O[action * n * z + sp * z + observation] * Gamma[maxAlphaIndex * n + sp];
-				}
-				alphaBA[beliefIndex * n + s] += gamma * value;
+				actionValue += alphaBA[beliefIndex * n + s] * B[beliefIndex * n + s];
 			}
-		}
 
-		// If we are not dealing with the last action, and this was larger, then overwrite piPrime and GammaPrime's values.
-		if (action == 0 || actionValue > maxActionValue) {
-			maxActionValue = actionValue;
+			// If this was larger, then overwrite piPrime and GammaPrime's values.
+			if (actionValue > maxActionValue) {
+				maxActionValue = actionValue;
 
-			piPrime[beliefIndex] = action;
-			for (unsigned int s = 0; s < n; s++) {
-				GammaPrime[beliefIndex * n + s] = alphaBA[beliefIndex * n + s];
+				piPrime[beliefIndex] = action;
+				for (unsigned int s = 0; s < n; s++) {
+					GammaPrime[beliefIndex * n + s] = alphaBA[beliefIndex * n + s];
+				}
 			}
 		}
 	}
@@ -194,7 +201,7 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 	float maxAlphaDotBeta = 0.0f;
 
 	for (unsigned int alphaIndex = 0; alphaIndex < r; alphaIndex++) {
-		float alphaDotBeta = 0.0;
+		float alphaDotBeta = 0.0f;
 
 		for (unsigned int s = 0; s < n; s++) {
 			alphaDotBeta += Gamma[alphaIndex * n + s] * B[beliefIndex * n + s];
@@ -215,7 +222,7 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 	// vectors again, and if the value at that belief state is within eta, then
 	// we can mark the action in A as allowable.
 	for (unsigned int alphaIndex = 0; alphaIndex < r; alphaIndex++) {
-		float alphaDotBeta = 0.0;
+		float alphaDotBeta = 0.0f;
 
 		for (unsigned int s = 0; s < n; s++) {
 			alphaDotBeta += Gamma[alphaIndex * n + s] * B[beliefIndex * n + s];
@@ -275,18 +282,30 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		return -3;
 	}
 
-	// Create the device-side Gamma and pi.
+	// Create the device-side Gamma.
 	if (cudaMalloc(&d_Gamma, r * n * sizeof(float)) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_cuda]: %s",
 				"Failed to allocate device-side memory for Gamma.");
 		return -3;
 	}
+	if (cudaMemcpy(d_Gamma, Gamma, r * n * sizeof(float), cudaMemcpyHostToDevice) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_cuda]: %s",
+				"Failed to copy memory from host to device for Gamma.");
+		return -3;
+	}
+
 	if (cudaMalloc(&d_GammaPrime, r * n * sizeof(float)) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_cuda]: %s",
 				"Failed to allocate device-side memory for Gamma (prime).");
 		return -3;
 	}
+	if (cudaMemcpy(d_GammaPrime, Gamma, r * n * sizeof(float), cudaMemcpyHostToDevice) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_cuda]: %s",
+				"Failed to copy memory from host to device for Gamma (prime).");
+		return -3;
+	}
 
+	// Create the device-side pi.
 	if (cudaMalloc(&d_pi, r * sizeof(unsigned int)) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_cuda]: %s",
 				"Failed to allocate device-side memory for pi.");

@@ -36,8 +36,8 @@
  * @param	m			The number of actions, in total, that are possible.
  * @param	z			The number of observations.
  * @param	r			The number of belief points.
- * @param	A			A mapping of states-action pairs (n-m array) to a boolean if the action
- * 						is available at that state or not. This will be modified.
+ * @param	A			A mapping of belief-action pairs (r-m array) to a boolean if the action
+ * 						is available at that belief state or not. This will be modified.
  * @param	d_B			A r-n array, consisting of r sets of n-vector belief distributions.
  *  					(Device-side pointer.)
  * @param	d_T			A mapping of state-action-state triples (n-m-n array) to a

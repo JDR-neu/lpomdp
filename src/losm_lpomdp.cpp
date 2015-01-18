@@ -729,7 +729,7 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 
 			//* The Best One For Time Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				timeReward->set(s, a, s, floatMaxCuda);
+				timeReward->set(s, a, floatMaxCuda);
 			} else if (s->is_goal()) {
 				timeReward->set(s, a, 0.0);
 			} else {
@@ -748,7 +748,7 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 //			}
 
 
-			//* The Best One For Autonomy Reward
+			/* The Best One For Autonomy Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
 				autonomyReward->set(s, a, floatMaxCuda);
 			} else if (s->is_goal()) {
@@ -766,6 +766,19 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 					autonomyReward->set(s, a, epsilonPenalty);
 				}
 			}
+			//*/
+
+
+			//* Copy-Paste of Time Reward for Autonomy Reward, used for debugging.
+			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
+				autonomyReward->set(s, a, floatMaxCuda);
+			} else if (s->is_goal()) {
+				autonomyReward->set(s, a, 0.0);
+			} else {
+				autonomyReward->set(s, a, basePenalty);
+			}
+			//*/
+
 
 			/*
 			else if (successors[s][a->get_index()]->get_tiredness() > 0) {

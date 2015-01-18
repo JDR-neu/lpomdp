@@ -123,10 +123,11 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
 		std::cout << "  R[" << i << "]" << std::endl; std::cout.flush();
 
+		SARewards *Ri = dynamic_cast<SARewards *>(R->get(i));
+
 		// Define eta (the one-step slack).
 		double etai = delta[i];
 		if (constrainEta) {
-			SARewards *Ri = dynamic_cast<SARewards *>(R->get(i));
 			double deltaB = compute_belief_density(S);
 			double epsiloni = (Ri->get_max() - Ri->get_min()) / (1.0 - h->get_discount_factor()) * deltaB;
 			etai = std::max(0.0, (1.0 - h->get_discount_factor()) * delta[i] - epsiloni);
@@ -134,6 +135,12 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 
 		// Create Gamma and pi.
 		float *Gamma = new float[B.size() * S->get_num_states()];
+		for (unsigned int x = 0; x < B.size(); x++) {
+			for (unsigned int y = 0; y < S->get_num_states(); y++) {
+//				Gamma[x * S->get_num_states() + y] = Ri->get_min() / (1.0 - h->get_discount_factor());
+				Gamma[x * S->get_num_states() + y] = 0.0f;
+			}
+		}
 		unsigned int *pi = new unsigned int[B.size()];
 
 		// Execute CUDA!
@@ -152,6 +159,22 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 				1024, // Number of Threads
 				Gamma,
 				pi);
+
+		// Print out Gamma and pi.
+		std::cout << "Gamma:" << std::endl;
+		for (unsigned int x = 0; x < B.size(); x++) {
+			for (unsigned int y = 0; y < S->get_num_states(); y++) {
+				std::cout << y << ":" << Gamma[x * S->get_num_states() + y] << " ";
+			}
+			std::cout << std::endl;
+		}
+		std::cout.flush();
+
+		std::cout << "pi:" << std::endl;
+		for (unsigned int x = 0; x < B.size(); x++) {
+			std::cout << x << ":" << pi[x] << " ";
+		}
+		std::cout.flush();
 
 		// Create the vector of policy alpha vectors and set the policy equal to them.
 		// Note: This transfer responsibility of memory management to the policy variable.
