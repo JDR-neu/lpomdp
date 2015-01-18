@@ -49,11 +49,12 @@
 								<option id="gnu.cpp.link.option.libs.1679472854" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" valueType="libs">
 									<listOptionValue builtIn="false" value="rbr"/>
 									<listOptionValue builtIn="false" value="losm"/>
+									<listOptionValue builtIn="false" value="lpbvi_cuda"/>
 								</option>
 								<option id="gnu.cpp.link.option.paths.1575493485" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/losm/BuildLibrary}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/librbr/BuildLibrary}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/lvi_cuda/BuildLibrary&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/lpbvi_cuda/BuildLibrary&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1024888448" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
@@ -87,6 +88,7 @@
 		<configuration configurationName="Release">
 			<resource resourceType="PROJECT" workspacePath="/lpomdp"/>
 		</configuration>
+		<configuration configurationName="Execute"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>

@@ -83,12 +83,14 @@
 
 __global__ void lpbvi_update(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		const bool *A, const float *B, const float *T, const float *O, const float *R, float gamma,
-		const float *Gamma, const unsigned int *pi, float *GammaPrime, unsigned int *piPrime)
+		const float *Gamma, const unsigned int *pi,
+		float *alphaBA,
+		float *GammaPrime, unsigned int *piPrime)
 {
 	// For each beliefIndex, we will store an alpha-vector of size n. Hence, this must be of
 	// size r * n. This is used to hold intermediate values while trying to find the maximal
 	// action.
-	extern __shared__ float alphaBA[];
+//	extern __shared__ float alphaBA[];
 
 	// Each block will run a different belief. Our overall goal: Compute the value
 	// of GammaPrime[beliefIndex * n + ???] and piPrime[beliefIndex].
@@ -228,23 +230,26 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		bool *A, const float *d_B,
 		const float *d_T, const float *d_O, const float *d_R,
-		float Rmin, float Rmax, float gamma, float eta, unsigned int horizon,
+		float gamma, float eta, unsigned int horizon,
 		unsigned int numThreads,
 		float *Gamma, unsigned int *pi)
 {
-	// The device pointers for the alpha vectors: Gamma and GammaPrime.
+	// The device pointers for the alpha-vectors: Gamma and GammaPrime.
 	float *d_Gamma;
 	float *d_GammaPrime;
 
-	// The device pointers for the actions taken on each alpha vector: pi and piPrime.
+	// The device pointers for the actions taken on each alpha-vector: pi and piPrime.
 	unsigned int *d_pi;
 	unsigned int *d_piPrime;
+
+	// The device pointer for the intermediate alpha-vectors computed in the inner for loop.
+	float *d_AlphaBA;
 
 	// Ensure the data is valid.
 	if (n == 0 || m == 0 || z == 0 || r == 0 ||
 			A == nullptr || d_B == nullptr ||
 			d_T == nullptr || d_O == nullptr || d_R == nullptr ||
-			Rmin >= Rmax || gamma < 0.0 || gamma >= 1.0 || horizon < 1) {
+			gamma < 0.0 || gamma >= 1.0 || horizon < 1) {
 		fprintf(stderr, "Error[lpbvi_cuda]: %s", "Invalid arguments.");
 		return -1;
 	}
@@ -293,18 +298,31 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		return -3;
 	}
 
+	// Create the device-side memory for the intermediate variable alphaBA.
+	if (cudaMalloc(&d_AlphaBA, r * n * sizeof(float)) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_cuda]: %s",
+				"Failed to allocate device-side memory for alphaBA.");
+		return -3;
+	}
+
 	// For each of the updates, run PBVI.
 	for (int t = 0; t < horizon; t++) {
+		fprintf(stdout, "Iteration %i of %i\n", t+1, horizon);
+
 		// Execute a kernel for the first three stages of for-loops: B, A, Z, as a 3d-block,
 		// and the 4th stage for-loop over Gamma as the threads.
 		if (t % 2 == 0) {
-			lpbvi_update<<< numBlocks, numThreads, r * n >>>(n, m, z, r,
+			lpbvi_update<<< numBlocks, numThreads >>>(n, m, z, r,
 					d_A, d_B, d_T, d_O, d_R, gamma,
-					d_Gamma, d_pi, d_GammaPrime, d_piPrime);
+					d_Gamma, d_pi,
+					d_AlphaBA,
+					d_GammaPrime, d_piPrime);
 		} else {
-			lpbvi_update<<< numBlocks, numThreads, r * n >>>(n, m, z, r,
+			lpbvi_update<<< numBlocks, numThreads >>>(n, m, z, r,
 					d_A, d_B, d_T, d_O, d_R, gamma,
-					d_GammaPrime, d_piPrime, d_Gamma, d_pi);
+					d_GammaPrime, d_piPrime,
+					d_AlphaBA,
+					d_Gamma, d_pi);
 		}
 
 		// Check if there was an error executing the kernel.
@@ -380,6 +398,7 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 	cudaFree(d_GammaPrime);
 	cudaFree(d_pi);
 	cudaFree(d_piPrime);
+	cudaFree(d_AlphaBA);
 
 	return 0;
 }
@@ -481,12 +500,28 @@ int lpbvi_initialize_rewards(unsigned int n, unsigned int m, const float *R, flo
 	return 0;
 }
 
-int lpbvi_uninitialize(float *&d_B, float *&d_T, float *&d_O, float *&d_R)
+int lpbvi_uninitialize(float *&d_B, float *&d_T, float *&d_O, float **&d_R, unsigned int k)
 {
-	cudaFree(d_B);
-	cudaFree(d_T);
-	cudaFree(d_O);
-	cudaFree(d_R);
+	if (d_B != nullptr) {
+		cudaFree(d_B);
+	}
+	d_B = nullptr;
+
+	if (d_T != nullptr) {
+		cudaFree(d_T);
+	}
+	d_T = nullptr;
+
+	if (d_O != nullptr) {
+		cudaFree(d_O);
+	}
+	d_O = nullptr;
+
+	if (d_R != nullptr) {
+		for (unsigned int i = 0; i < k; i++) {
+			cudaFree(d_R[i]);
+		}
+	}
 
 	return 0;
 }

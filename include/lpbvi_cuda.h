@@ -27,22 +27,7 @@
 
 
 #include "lpomdp.h"
-
-#include "../../librbr/librbr/include/pomdp/pomdp_pbvi.h"
-
-#include "../../librbr/librbr/include/core/policy/policy_alpha_vectors.h"
-
-#include "../../librbr/librbr/include/core/states/states_map.h"
-#include "../../librbr/librbr/include/core/actions/actions_map.h"
-#include "../../librbr/librbr/include/core/observations/observations_map.h"
-#include "../../librbr/librbr/include/core/state_transitions/state_transitions.h"
-#include "../../librbr/librbr/include/core/observation_transitions/observation_transitions.h"
-#include "../../librbr/librbr/include/core/rewards/factored_rewards.h"
-#include "../../librbr/librbr/include/core/rewards/sa_rewards.h"
-#include "../../librbr/librbr/include/core/initial.h"
-#include "../../librbr/librbr/include/core/horizon.h"
-
-#include <unordered_map>
+#include "lpbvi.h"
 
 /**
  * Solve a Lexicographic Partially Observable Markov Decision Process (LMDP) using CUDA.
@@ -70,37 +55,6 @@ public:
 	 */
 	virtual ~LPBVICuda();
 
-	/**
-	 * Solve the LPOMDP provided using lexicographic point-based value iteration.
-	 * @param	pomdp							The LPOMDP to solve.
-	 * @throw	StateException					The LPOMDP did not have a StatesMap states object.
-	 * @throw	ActionException					The LPOMDP did not have a ActionsMap actions object.
-	 * @throw	ObservationException			The LPOMDP did not have a ObservationsMap actions object.
-	 * @throw	StateTransitionsException		The LPOMDP did not have a StateTransitions state transitions object.
-	 * @throw	ObservationTransitionsException	The LPOMDP did not have a ObservationTransitions observation transitions object.
-	 * @throw	RewardException					The LPOMDP did not have a FactoredRewards (elements SARewards) rewards object.
-	 * @throw	CoreException					The LPOMDP was not infinite horizon.
-	 * @throw	PolicyException					An error occurred computing the policy.
-	 * @return	Return the optimal policy, one set of alpha vectors for each value function.
-	 */
-	PolicyAlphaVectors **solve(LPOMDP *lpomdp);
-
-	/**
-	 * Compute the value of the belief states given a policy.
-	 * @param	pomdp							The LPOMDP to solve.
-	 * @param	policy							The policy mapping beliefs on the simplex to actions via their values.
-	 * @throw	StateException					The LPOMDP did not have a StatesMap states object.
-	 * @throw	ActionException					The LPOMDP did not have a ActionsMap actions object.
-	 * @throw	ObservationException			The LPOMDP did not have a ObservationsMap actions object.
-	 * @throw	StateTransitionsException		The LPOMDP did not have a StateTransitions state transitions object.
-	 * @throw	ObservationTransitionsException	The LPOMDP did not have a ObservationTransitions observation transitions object.
-	 * @throw	RewardException					The LPOMDP did not have a FactoredRewards (elements SARewards) rewards object.
-	 * @throw	CoreException					The LPOMDP was not infinite horizon.
-	 * @throw	PolicyException					An error occurred computing the policy.
-	 * @return	Return the alpha values for the policy provided.
-	 */
-	PolicyAlphaVectors **compute_value(LPOMDP *lpomdp, PolicyAlphaVectors *policy);
-
 protected:
 	/**
 	 * Solve an infinite horizon LMDP using value iteration.
@@ -118,8 +72,9 @@ protected:
 	virtual PolicyAlphaVectors **solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			ObservationsMap *Z, StateTransitions *T, ObservationTransitions *O,
 			FactoredRewards *R, Horizon *h, std::vector<float> &delta);
+
 	/**
-	 * Compute the value of a policy at the belief points.
+	 * Initialize the variables by creating the device-side memory.
 	 * @param	S					The finite states.
 	 * @param	A					The finite actions.
 	 * @param	Z					The finite observations.
@@ -128,19 +83,25 @@ protected:
 	 * @param	R					The factored state-action rewards.
 	 * @param	h					The horizon.
 	 * @param	delta				The slack vector.
-	 * @param	policy				The policy mapping beliefs on the simplex to actions via their values.
-	 * @throw	PolicyException		An error occurred computing the policy.
-	 * @return	Return the optimal policy.
 	 */
-	virtual PolicyAlphaVectors **compute_value_execute(StatesMap *S, ActionsMap *A,
-			ObservationsMap *Z, StateTransitions *T, ObservationTransitions *O,
-			FactoredRewards *R, Horizon *h, std::vector<float> &delta,
-			PolicyAlphaVectors *policy);
+	void initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMap *Z,
+			StateTransitions *T, ObservationTransitions *O, FactoredRewards *R,
+			Horizon *h, std::vector<float> &delta);
 
 	/**
-	 * Reset the internal variables.
+	 * Uninitialize the variables for the device-side memory.
 	 */
-	virtual void reset();
+	void uninitialize_variables();
+
+	/**
+	 * A quick helper array of actions arranged by their hash value.
+	 */
+	std::vector<Action *> sortedActions;
+
+	/**
+	 * The device-side pointer to the memory location of belief points.
+	 */
+	float *d_B;
 
 	/**
 	 * The device-side pointer to the memory location of state transitions.
@@ -148,11 +109,19 @@ protected:
 	float *d_T;
 
 	/**
+	 * The device-side pointer to the memory location of observation transitions.
+	 */
+	float *d_O;
+
+	/**
 	 * The device-side pointer to the memory location of rewards, one for each reward.
 	 */
 	float **d_R;
 
-
+	/**
+	 * The number of rewards.
+	 */
+	unsigned int k;
 
 };
 

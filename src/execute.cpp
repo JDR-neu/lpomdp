@@ -23,6 +23,7 @@
 
 #include "../include/losm_lpomdp.h"
 #include "../include/lpbvi.h"
+#include "../include/lpbvi_cuda.h"
 
 #include "../../losm/losm/include/losm_exception.h"
 
@@ -48,7 +49,9 @@ int main(int argc, char *argv[])
 
 	losmLPOMDP->set_slack(0.0f, 0.0f);
 
-	LPBVI solver;
+//	LPBVI solver;
+	LPBVICuda solver;
+
 	solver.eta_constraint(false);
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
 	/*
@@ -57,7 +60,7 @@ int main(int argc, char *argv[])
 	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
 	//*/
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(15);
+	solver.set_num_update_iterations(2);
 
 
 
