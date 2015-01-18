@@ -339,7 +339,6 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 			return -3;
 		}
 	}
-
 	// Copy the final result of Gamma and pi to the variables. This assumes
 	// that the memory has been allocated.
 	if (horizon % 2 == 1) {
@@ -386,9 +385,9 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 	}
 
 	// Copy the result to the r-n array A.
-	if (cudaMemcpy(A, d_A, r * n * sizeof(bool), cudaMemcpyDeviceToHost) != cudaSuccess) {
+	if (cudaMemcpy(A, d_A, r * m * sizeof(bool), cudaMemcpyDeviceToHost) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_cuda]: %s",
-				"Failed to copy memory from device to host for Gamma.");
+				"Failed to copy memory from device to host for the available actions at each belief state A.");
 		return -3;
 	}
 

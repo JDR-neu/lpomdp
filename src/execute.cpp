@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
 	//*/
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(2);
+	solver.set_num_update_iterations(5);
 
 
 
@@ -138,6 +138,7 @@ int main(int argc, char *argv[])
 //	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
 	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), 0.25, argv[8]);
 
+	/*
 	// After everything is computed, output the recorded values in a csv-like format to the screen.
 	std::cout << "V^eta(b^0):" << std::endl; std::cout.flush();
 	for (auto Vi : solver.get_recorded_values()) {
@@ -160,13 +161,18 @@ int main(int argc, char *argv[])
 		std::cout << std::endl; std::cout.flush();
 	}
 
+	// Free the result memory.
+	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {
+		delete [] result[i];
+	}
+	delete [] result;
+	*/
+
 	// Free the policy memory.
 	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {
 		delete [] policy[i];
-		delete [] result[i];
 	}
 	delete [] policy;
-	delete [] result;
 
 	return 0;
 }
