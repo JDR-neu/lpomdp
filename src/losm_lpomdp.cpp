@@ -83,7 +83,6 @@ void LOSMPOMDP::set_slack(float d1, float d2)
 	delta.push_back(std::max(0.0f, d2));
 }
 
-
 bool LOSMPOMDP::save_policy(PolicyAlphaVectors **policy, unsigned int k, std::string filename)
 {
 	StatesMap *S = dynamic_cast<StatesMap *>(states);
@@ -670,7 +669,7 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 	SARewardsArray *autonomyReward = new SARewardsArray(LOSMState::get_num_states(), IndexedAction::get_num_actions());
 	R->add_factor(autonomyReward);
 
-	float floatMaxCuda = -1e+35;
+	float floatMinCuda = -1e+35;
 
 	for (auto state : *S) {
 		LOSMState *s = dynamic_cast<LOSMState *>(resolve(state));
@@ -678,11 +677,101 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 		for (auto action : *A) {
 			IndexedAction *a = dynamic_cast<IndexedAction *>(resolve(action));
 
+
+			// -----------------------------------------------------------------------------------------------------------------
+			// -----------------------------------------------------------------------------------------------------------------
+			// -----------------------------------------------------------------------------------------------------------------
+
+
+			//* Streamlined Rewards
+
+			double basePenalty = -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS;
+			double epsilonPenalty = -INTERSECTION_WAIT_TIME_IN_SECONDS;
+
+			// The Best One For Time Reward
+			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
+				timeReward->set(s, a, floatMinCuda);
+			} else if (s->is_goal()) {
+				timeReward->set(s, a, 0.0);
+			} else {
+				timeReward->set(s, a, basePenalty);
+			}
+
+			// The Best One For Autonomy Reward
+			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
+				autonomyReward->set(s, a, floatMinCuda);
+			} else if (s->is_goal()) {
+				autonomyReward->set(s, a, 0.0);
+			} else if (s->get_tiredness() > 0) {
+				if (s->get_autonomy()) {
+					autonomyReward->set(s, a, epsilonPenalty);
+				} else {
+					autonomyReward->set(s, a, basePenalty);
+				}
+			} else {
+				if (s->is_autonomy_capable() && !s->get_autonomy()) {
+					autonomyReward->set(s, a, basePenalty);
+				} else {
+					autonomyReward->set(s, a, epsilonPenalty);
+				}
+			}
+
+			//*/
+
+
+			// -----------------------------------------------------------------------------------------------------------------
+			// -----------------------------------------------------------------------------------------------------------------
+			// -----------------------------------------------------------------------------------------------------------------
+
+
+			/* Original Rewards
+
+			// Check if this is a self-transition, which is fine if the agent is in a goal
+			// state, but otherwise yields a large negative reward. This is how I am able to
+			// handle having the same number of actions for each state, even if the degree of
+			// the node is less than the number of actions.
+			if (s->get_current()->get_uid() == successors[s][a->get_index()]->get_current()->get_uid() &&
+					!successors[s][a->get_index()]->is_goal()) {
+				// Goal states always transition to themselves (absorbing), with zero reward.
+				timeReward->set(s, a, floatMinCuda);
+				autonomyReward->set(s, a, floatMinCuda);
+
+				continue;
+			}
+
+			// If this transitions to a goal, then zero penalty. Note: The successor of any action from
+			// any *goal* state is also a goal state, namely itself.
+			if (successors[s][a->get_index()]->is_goal()) {
+				timeReward->set(s, a, 0.0);
+				autonomyReward->set(s, a, 0.0);
+
+				continue;
+			}
+
+			// Time is always penalized based on time spent on the road.
+			timeReward->set(s, a, -successors[s][a->get_index()]->get_distance() / successors[s][a->get_index()]->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
+
+			// The autonomy is always penalized for distance if they fail to correctly move autonomously. Otherwise it is an epsilon penalty.
+			if (!successors[s][a->get_index()]->get_autonomy() && successors[s][a->get_index()]->get_tiredness() > 0) {
+//					if (sp->is_autonomy_capable() && !sp->get_autonomy() && sp->get_tiredness() > 0) {
+				autonomyReward->set(s, a, -successors[s][a->get_index()]->get_distance() / successors[s][a->get_index()]->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
+			} else {
+				autonomyReward->set(s, a, -INTERSECTION_WAIT_TIME_IN_SECONDS);
+			}
+
+			//*/
+
+
+			// -----------------------------------------------------------------------------------------------------------------
+			// -----------------------------------------------------------------------------------------------------------------
+			// -----------------------------------------------------------------------------------------------------------------
+
+
 			/*
 			// If this is not a goal state, and the action taken was greater than the 2 * degree of this node.
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				timeReward->set(s, a, s, floatMaxCuda);
-				autonomyReward->set(s, a, s, floatMaxCuda);
+				timeReward->set(s, a, s, floatMinCuda);
+				autonomyReward->set(s, a, s, floatMinCuda);
 				continue;
 			}
 			//*/
@@ -706,8 +795,8 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 			// the node is less than the number of actions.
 			if (s == sp && !sp->is_goal()) {
 				// Goal states always transition to themselves (absorbing), with zero reward.
-				timeReward->set(s, a, s, floatMaxCuda);
-				autonomyReward->set(s, a, s, floatMaxCuda);
+				timeReward->set(s, a, s, floatMinCuda);
+				autonomyReward->set(s, a, s, floatMinCuda);
 
 				continue;
 			}
@@ -719,21 +808,6 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 				timeReward->set(s, a, 0.0);
 				autonomyReward->set(s, a, 0.0);
 				continue;
-			}
-			//*/
-
-
-			double basePenalty = -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS;
-			double epsilonPenalty = -INTERSECTION_WAIT_TIME_IN_SECONDS;
-
-
-			//* The Best One For Time Reward
-			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				timeReward->set(s, a, floatMaxCuda);
-			} else if (s->is_goal()) {
-				timeReward->set(s, a, 0.0);
-			} else {
-				timeReward->set(s, a, basePenalty);
 			}
 			//*/
 
@@ -750,7 +824,7 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 
 			/* The Best One For Autonomy Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				autonomyReward->set(s, a, floatMaxCuda);
+				autonomyReward->set(s, a, floatMinCuda);
 			} else if (s->is_goal()) {
 				autonomyReward->set(s, a, 0.0);
 			} else if (s->get_tiredness() > 0) {
@@ -769,9 +843,9 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 			//*/
 
 
-			//* Copy-Paste of Time Reward for Autonomy Reward, used for debugging.
+			/* Copy-Paste of Time Reward for Autonomy Reward, used for debugging.
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				autonomyReward->set(s, a, floatMaxCuda);
+				autonomyReward->set(s, a, floatMinCuda);
 			} else if (s->is_goal()) {
 				autonomyReward->set(s, a, 0.0);
 			} else {
@@ -842,84 +916,6 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 				}
 			}
 			//*/
-
-//			OLD CODE
-//			for (auto statePrime : *S) {
-//				LOSMState *sp = dynamic_cast<LOSMState *>(resolve(statePrime));
-//
-////				std::cout << s->get_index() << " " << ((IndexedAction *)a)->get_index() << " " << sp->get_index() << std::endl; std::cout.flush();
-//
-////				timeReward->set(s, a, sp, floatMaxCuda);
-////				autonomyReward->set(s, a, sp, floatMaxCuda);
-//
-//				// If this is a valid successor state, then we can set a non-trivial reward.
-//				if (T->get(s, a, sp) > 0.0) {
-//					// Check if this is a self-transition, which is fine if the agent is in a goal
-//					// state, but otherwise yields a large negative reward. This is how I am able to
-//					// handle having the same number of actions for each state, even if the degree of
-//					// the node is less than the number of actions.
-//					if (s == sp && !sp->is_goal()) {
-//						// Goal states always transition to themselves (absorbing), with zero reward.
-//						timeReward->set(s, a, s, floatMaxCuda);
-//						autonomyReward->set(s, a, s, floatMaxCuda);
-//
-//						continue;
-//					}
-//
-//					// If you got here, then s != sp, so any transition to a goal state is cost of 0 for the time reward.
-//					if (sp->is_goal()) {
-//						timeReward->set(s, a, sp, 0.0);
-//						autonomyReward->set(s, a, sp, 0.0);
-//
-//						continue;
-//					}
-//
-//					// Enabling or disabling autonomy changes the speed of the car, but provides
-//					// a positive reward for safely driving autonomously, regardless of the
-//					// tiredness of the driver.
-////					if (sp->get_autonomy()) {
-////						timeReward->set(s, a, sp, -sp->get_distance() / (sp->get_speed_limit() * AUTONOMY_SPEED_LIMIT_FACTOR) * TO_SECONDS);
-////					} else {
-//						timeReward->set(s, a, sp, -sp->get_distance() / sp->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
-////					}
-//
-//					//*
-//					if (!sp->get_autonomy() && sp->get_tiredness() > 0) {
-////					if (sp->is_autonomy_capable() && !sp->get_autonomy() && sp->get_tiredness() > 0) {
-//						autonomyReward->set(s, a, sp, -sp->get_distance() / sp->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS);
-//					} else {
-//						autonomyReward->set(s, a, sp, -INTERSECTION_WAIT_TIME_IN_SECONDS);
-//					}
-//					//*/
-//
-//					/*
-//					// If the road is autonomy capable, you are not autonomous, and you are tired, then take a penalty.
-//					// Otherwise, no penalty is given. In other words, you are penalized for every second spent driving
-//					// manually when you are tired.
-//					if (sp->is_autonomy_capable()) {
-//						if (sp->get_autonomy()) {
-//							if (sp->get_tiredness() == 0) {
-//								autonomyReward->set(s, a, sp, 0.0); //-sp->get_distance() / sp->get_speed_limit() * 0.5); // Autonomy Possible + Autonomy Enabled + Awake = Alright
-//							} else {
-//								autonomyReward->set(s, a, sp, 0.0); //-sp->get_distance() / sp->get_speed_limit() * 0.1); // Autonomy Possible + Autonomy Enabled + Tired = Good!!!
-//							}
-//						} else {
-//							if (sp->get_tiredness() == 0) {
-//								autonomyReward->set(s, a, sp, 0.0); //-sp->get_distance() / sp->get_speed_limit() * 0.5); // Autonomy Possible + Autonomy Disabled + Awake = Alright
-//							} else {
-//								autonomyReward->set(s, a, sp, -sp->get_distance() / sp->get_speed_limit()); // Autonomy Possible + Autonomy Disabled + Tired = Bad!!!
-//							}
-//						}
-//					} else {
-//						if (sp->get_tiredness() == 0) {
-//							autonomyReward->set(s, a, sp, 0.0); //-sp->get_distance() / sp->get_speed_limit() * 0.1); // Autonomy Impossible + Awake = Good!!!
-//						} else {
-//							autonomyReward->set(s, a, sp, 0.0); //-sp->get_distance() / sp->get_speed_limit() * 0.5); // Autonomy Impossible + Tired = Alright
-//						}
-//					}
-//					//*/
-//				}
-//			}
 		}
 	}
 

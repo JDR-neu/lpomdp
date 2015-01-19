@@ -462,7 +462,7 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		}
 	}
 
-	//* Check the values of the alpha-vectors by printing them out.
+	/* Check the values of the alpha-vectors by printing them out.
 	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
 		policy[i]->print();
 		std::cout << "\n\n";

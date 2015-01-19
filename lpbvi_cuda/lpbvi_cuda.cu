@@ -87,32 +87,12 @@ __global__ void lpbvi_update(unsigned int n, unsigned int m, unsigned int z, uns
 		float *alphaBA,
 		float *GammaPrime, unsigned int *piPrime)
 {
-	// For each beliefIndex, we will store an alpha-vector of size n. Hence, this must be of
-	// size r * n. This is used to hold intermediate values while trying to find the maximal
-	// action.
-//	extern __shared__ float alphaBA[];
-
 	// Each block will run a different belief. Our overall goal: Compute the value
 	// of GammaPrime[beliefIndex * n + ???] and piPrime[beliefIndex].
 	unsigned int beliefIndex = blockIdx.x * blockDim.x + threadIdx.x;
 	if (beliefIndex >= r) {
 		return;
 	}
-
-	// Each thread deals with a different action-observation pair. Since memory can be
-	// shared among threads in a block, we can easily store results in shared memory to
-	// compute the maximal alpha-vector over actions.
-//	unsigned int action = blockIdx.y;
-//	unsigned int observation = blockIdx.z;
-
-	// We want to compute: dot(alphaBA, belief). Instead of storing all these intermediate
-	// alpha-vectors, we will just store the values of the dot products. Once we figure out
-	// which action yields the largest value, then we'll compute the actual alpha-vector and
-	// store it in GammaPrime[beliefIndex * n + ???], as well as set the action piPrime[beliefIndex].
-
-	// Now we know the maximal alpha-vector for this action and observation. Compute the actual value
-	// of this observation by summing each state in the alpha-vector to form a new one, plus the original
-	// GammaAStar value. Since we will dot-product this with the belief, we will just do that here.
 
 	// We want to find the action that maximizes the value, store it in piPrime, as well as its alpha-vector GammaPrime.
 	float maxActionValue = FLT_MIN;
@@ -215,7 +195,7 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 
 	// Assign all actions as not available.
 	for (unsigned int action = 0; action < m; action++) {
-		A[beliefIndex * n + action] = false;
+		A[beliefIndex * m + action] = false;
 	}
 
 	// Now that we have the optimal value at this belief point, we can run over the
@@ -229,7 +209,7 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 		}
 
 		if (maxAlphaDotBeta - alphaDotBeta < eta) {
-			A[beliefIndex * n + pi[alphaIndex]] = true;
+			A[beliefIndex * m + pi[alphaIndex]] = true;
 		}
 	}
 }
