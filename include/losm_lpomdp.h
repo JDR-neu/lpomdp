@@ -44,7 +44,14 @@
 
 #define NUM_TIREDNESS_LEVELS 2
 
-#define INTERSECTION_WAIT_TIME_IN_SECONDS 0.1
+// Note: Do not change this value!!! In the past, due to the reward structure and the actual distances
+// between intersections on real-world maps, sometimes if this value is too small it will cause the agent
+// to seek bouncing around on small roads. This is essentially an "epsilon penalty" for rewards, and if
+// the actual map is small, with the amount of time spent on the road < 5 seconds, then the epsilon
+// penalty becomes larger than the actual penalty... which is really bad.
+// TL;DR: Don't mess with it right now.
+#define INTERSECTION_WAIT_TIME_IN_SECONDS 5.0
+
 #define AUTONOMY_SPEED_LIMIT_THRESHOLD 30.0
 #define AUTONOMY_SPEED_LIMIT_FACTOR 0.9
 

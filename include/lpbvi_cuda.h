@@ -84,14 +84,14 @@ protected:
 	 * @param	h					The horizon.
 	 * @param	delta				The slack vector.
 	 */
-	void initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMap *Z,
+	virtual void initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMap *Z,
 			StateTransitions *T, ObservationTransitions *O, FactoredRewards *R,
 			Horizon *h, std::vector<float> &delta);
 
 	/**
 	 * Uninitialize the variables for the device-side memory.
 	 */
-	void uninitialize_variables();
+	virtual void uninitialize_variables();
 
 	/**
 	 * A quick helper array of actions arranged by their hash value.

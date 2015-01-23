@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
 	//*/
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(20);
+	solver.set_num_update_iterations(10);
 
 
 

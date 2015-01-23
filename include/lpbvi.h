@@ -78,26 +78,26 @@ public:
 	 * @param	epsilon				The desired tolerance between value functions to check for convergence.
 	 * @throw	RewardException		The POMDP did not have a SARewards rewards object.
 	 */
-	void compute_num_update_iterations(POMDP *pomdp, double epsilon);
+	virtual void compute_num_update_iterations(POMDP *pomdp, double epsilon);
 
 	/**
 	 * Setup the belief state to record over iterations.
 	 * @param	b	The belief state to record.
 	 */
-	void set_belief_to_record(BeliefState *b);
+	virtual void set_belief_to_record(BeliefState *b);
 
 	/**
 	 * Get the recorded values of the belief state for all value functions. These values are set
 	 * during both the "solve" function and
 	 * @return	The vector over time of each vector of values of the specified belief state.
 	 */
-	const std::vector<std::vector<double> > &get_recorded_values() const;
+	virtual const std::vector<std::vector<double> > &get_recorded_values() const;
 
 	/**
 	 * Whether or not to constrain eta for theoretical guarantee.
 	 * @param	value	Constraint it or not.
 	 */
-	void eta_constraint(bool value);
+	virtual void eta_constraint(bool value);
 
 	/**
 	 * Throw an error if they try to solve just a POMDP.
