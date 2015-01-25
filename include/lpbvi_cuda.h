@@ -55,6 +55,13 @@ public:
 	 */
 	virtual ~LPBVICuda();
 
+	/**
+	 * Assign the max non-zero belief point states and successor states.
+	 * @param	nonZeroBeliefStates		The max non-zero belief states.
+	 * @param	sucessorStates			The max successor states.
+	 */
+	void set_performance_variables(unsigned int nonZeroBeliefStates, unsigned int successorStates);
+
 protected:
 	/**
 	 * Solve an infinite horizon LMDP using value iteration.
@@ -122,6 +129,26 @@ protected:
 	 * The number of rewards.
 	 */
 	unsigned int k;
+
+	/**
+	 * The device-side pointer to the memory location of the non-zero belief states.
+	 */
+	int *d_NonZeroBeliefStates;
+
+	/**
+	 * The device-side pointer to the memory location of the successor states.
+	 */
+	int *d_SuccessorStates;
+
+	/**
+	 * The maximum number of states with non-zero belief probabilities that is possible.
+	 */
+	unsigned int maxNonZeroBeliefStates;
+
+	/**
+	 * The maximum number of successor states given any state-action pair.
+	 */
+	unsigned int maxSuccessorStates;
 
 };
 

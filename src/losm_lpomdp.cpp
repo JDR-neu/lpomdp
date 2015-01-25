@@ -669,8 +669,6 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 	SARewardsArray *autonomyReward = new SARewardsArray(LOSMState::get_num_states(), IndexedAction::get_num_actions());
 	R->add_factor(autonomyReward);
 
-	float floatMinCuda = -1e+35;
-
 	for (auto state : *S) {
 		LOSMState *s = dynamic_cast<LOSMState *>(resolve(state));
 
@@ -687,10 +685,11 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 
 			double basePenalty = -s->get_distance() / s->get_speed_limit() * TO_SECONDS - INTERSECTION_WAIT_TIME_IN_SECONDS;
 			double epsilonPenalty = -INTERSECTION_WAIT_TIME_IN_SECONDS;
+			double invalidActionPenalty = -MAXIMUM_POSSIBLE_TIME_SPENT_ON_ROAD_IN_SECONDS;
 
 			// The Best One For Time Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				timeReward->set(s, a, floatMinCuda);
+				timeReward->set(s, a, invalidActionPenalty);
 			} else if (s->is_goal()) {
 				timeReward->set(s, a, 0.0);
 			} else {
@@ -699,7 +698,7 @@ void LOSMPOMDP::create_rewards(LOSM *losm)
 
 			// The Best One For Autonomy Reward
 			if (!s->is_goal() && a->get_index() >= s->get_current()->get_degree() * 2) {
-				autonomyReward->set(s, a, floatMinCuda);
+				autonomyReward->set(s, a, invalidActionPenalty);
 			} else if (s->is_goal()) {
 				autonomyReward->set(s, a, 0.0);
 			} else if (s->get_tiredness() > 0) {

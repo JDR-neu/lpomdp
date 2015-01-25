@@ -29,59 +29,193 @@
 #define nullptr NULL
 
 // This is determined by hardware, so what is below is a 'safe' guess. If this is
-// off, the program might return 'nan' or 'inf'.
+// off, the program might return 'nan' or 'inf'. These come from IEEE floating-point
+// standards.
 #define FLT_MAX 1e+35
 #define FLT_MIN -1e+35
+#define FLT_ERR_TOL 1e-9
 
-//__global__ void lpbvi_update_belief_state_dot_product_step(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
-//		const bool *A, const float *B, const float *T, const float *O, const float *R, float gamma,
-//		const float *Gamma, const unsigned int *pi, float *GammaPrime, unsigned int *piPrime,
-//		unsigned int beliefIndex, unsigned int a, unsigned int o,
-//		float *maxAlphaDotBeta)
-//{
-//	// Each block is for a particular action, observation, and alpha-vector in Gamma_{b, a, omega} (which are Gamma^{t-1}).
-//	unsigned int alphaIndex = blockIdx.x;
-//
-//	// Each thread is over states, and they stride if needed.
-//	for (unsigned int s = threadIdx.x; s < n; s += blockDim.x) {
-//		// We compute the value of this state in the alpha-vector, then multiply it by the belief, and add it to
-//		// the current dot product value for this alpha-vector.
-//		double value = 0.0;
-//		for (unsigned int sp = 0; sp < n; sp++) {
-//			value += T[s * m * n + a * n + sp] * O[a * n * z + sp * z + o] * Gamma[alphaIndex * n + sp];
-//		}
-//		value *= gamma * B[beliefIndex * n + s];
-//		maxAlphaDotBeta[alphaIndex] += value;
-//	}
-//}
-//
-//// We do a reduction to compute the max index within maxAlphaDotBeta.
-//__global__ void lpbvi_update_belief_state_max_step(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
-//		const bool *A, const float *B, const float *T, const float *O, const float *R, float gamma,
-//		const float *Gamma, const unsigned int *pi, float *GammaPrime, unsigned int *piPrime,
-//		float *belief, unsigned int action, unsigned int observation,
-//		float *maxAlphaDotBeta)
-//{
-//
-//}
-//
-//// We compute the alpha-vector of maxAlphaDotBeta, but instead of storing it, we add it to the alphaBAStar.
-//__global__ void lpbvi_update_belief_state_max_alpha_vector_step(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
-//		const bool *A, const float *B, const float *T, const float *O, const float *R, float gamma,
-//		const float *Gamma, const unsigned int *pi, float *GammaPrime, unsigned int *piPrime,
-//		float *belief, unsigned int action, unsigned int observation, unsigned int maxAlphaIndex,
-//		float *alphaBAStar)
-//{
-//
-//}
+__global__ void lpbvi_initialize_alphaBA(unsigned int n, unsigned int m, unsigned int r, const float *R, float *alphaBA)
+{
+	unsigned int beliefIndex = blockIdx.x;
+	unsigned int action = blockIdx.y;
 
-// Find the max of each alphaBAStar using a reduction over all actions. Remember to set the action index in pi as part of this.
+	if (beliefIndex >= r || action >= m) {
+		return;
+	}
 
-// For all the belief points, we execute independent code which computes the next alpha-vector to replace it (but in GammaPrime),
-// using the current set of alpha-vectors (in Gamma).
+	// Compute Gamma_{a,*} and set it to the first value of alphaBA. Stride here.
+	for (unsigned int s = threadIdx.x; s < n; s += blockDim.x) {
+		alphaBA[beliefIndex * m * n + action * n + s] = R[s * m + action];
+	}
+}
 
+__global__ void lpbvi_compute_alphaBA(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
+		const bool *A, const float *B, const float *T, const float *O, const float *R,
+		const int *nonZeroBeliefStates, unsigned int maxNonZeroBeliefStates,
+		const int *successorStates, unsigned int maxSuccessorStates,
+		float gamma,
+		const float *Gamma, const unsigned int *pi,
+//		unsigned int beliefIndex, float *alphaDotBeta,
+		float *alphaBA)
+{
+	// Since float and unsigned int are 4 bytes each, and we need each array to be the size of
+	// the number of threads, we will need to call this with:
+	// sizeof(float) * numThreads + sizeof(unsigned int * numThreads.
+	// Note: blockDim.x == numThreads
+	extern __shared__ float sdata[];
+	float *maxAlphaDotBeta = (float *)sdata;
+	unsigned int *maxAlphaIndex = (unsigned int *)&maxAlphaDotBeta[blockDim.x];
 
-__global__ void lpbvi_update(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
+	maxAlphaDotBeta[threadIdx.x] = FLT_MIN;
+	maxAlphaIndex[threadIdx.x] = 0;
+
+	__syncthreads();
+
+	unsigned int beliefIndex = blockIdx.x;
+	unsigned int action = blockIdx.y;
+	unsigned int observation = blockIdx.z;
+
+	if (beliefIndex >= r || action >= m || observation >= z) {
+		return;
+	}
+
+	// Compute the max alpha vector from Gamma, given the fixed action and observation.
+	// Note: this is the max w.r.t. just the strided elements. The reduction will
+	// be computed afterwards for the max over all alpha-vectors.
+
+	for (unsigned int alphaIndex = threadIdx.x; alphaIndex < r; alphaIndex += blockDim.x) {
+		float alphaDotBeta = 0.0f;
+
+		for (unsigned int i = 0; i < maxNonZeroBeliefStates; i++) {
+			int s = nonZeroBeliefStates[beliefIndex * maxNonZeroBeliefStates + i];
+			if (s < 0) {
+				break;
+			}
+
+			// We compute the value of this state in the alpha-vector, then multiply it by the belief, and add it to
+			// the current dot product value for this alpha-vector.
+			float value = 0.0f;
+			for (unsigned int j = 0; j < maxSuccessorStates; j++) {
+				int sp = successorStates[s * m * maxSuccessorStates + action * maxSuccessorStates + j];
+				if (sp < 0) {
+					break;
+				}
+				value += T[s * m * n + action * n + sp] * O[action * n * z + sp * z + observation] * Gamma[alphaIndex * n + sp];
+
+//				if (Gamma[alphaIndex * n + sp] < 0.0) {
+//					printf("<%i %i>: %f\n", alphaIndex, sp, Gamma[alphaIndex * n + sp]);
+//				}
+			}
+			value *= gamma;
+
+			__syncthreads();
+
+			alphaDotBeta += value * B[beliefIndex * n + s];
+		}
+
+		__syncthreads();
+
+		// Store the maximal value and index.
+		if (alphaIndex == threadIdx.x || alphaDotBeta > maxAlphaDotBeta[threadIdx.x]) {
+			maxAlphaDotBeta[threadIdx.x] = alphaDotBeta; //[action * z * r + observation * r + alphaIndex];
+			maxAlphaIndex[threadIdx.x] = alphaIndex;
+
+//			printf("%i: <%f %i>\n", threadIdx.x, maxAlphaDotBeta[threadIdx.x], maxAlphaIndex[threadIdx.x]);
+		}
+	}
+
+	// Note: The above code essentially does the first add during load. It takes care of *all* the other elements
+	// *outside* the number of threads we have. In other words, starting here, we already have computed part of the
+	// maxAlphaDotBeta and maxAlphaIndex; we just need to finish the rest quickly, using a reduction.
+	__syncthreads();
+
+	// Use reduction to compute the max overall alpha-vector.
+	for (unsigned int alphaIndex = blockDim.x / 2; alphaIndex > 0; alphaIndex >>= 1) {
+		if (threadIdx.x < alphaIndex && threadIdx.x < r && threadIdx.x + alphaIndex < r) {
+			if (maxAlphaDotBeta[threadIdx.x] < maxAlphaDotBeta[threadIdx.x + alphaIndex]) {
+				maxAlphaDotBeta[threadIdx.x] = maxAlphaDotBeta[threadIdx.x + alphaIndex];
+				maxAlphaIndex[threadIdx.x] = maxAlphaIndex[threadIdx.x + alphaIndex];
+
+//				printf("%i: <%f %i>\n", threadIdx.x, maxAlphaDotBeta[threadIdx.x], maxAlphaIndex[threadIdx.x]);
+			}
+		}
+
+		__syncthreads();
+	}
+
+	// Now we can compute the alpha-vector component for this observation, since we have the max.
+	// We will need to compute the dot product anyway, so let's just distribute the belief over the
+	// sum over observations, and add it all up here.
+	// Note: This re-uses the thread to stride over states now.
+	for (unsigned int s = threadIdx.x; s < n; s += blockDim.x) {
+		// We compute the value of this state in the alpha-vector, then multiply it by the belief, and add it to
+		// the current dot product value for this alpha-vector.
+		float value = 0.0f;
+		for (unsigned int i = 0; i < maxSuccessorStates; i++) {
+			int sp = successorStates[s * m * maxSuccessorStates + action * maxSuccessorStates + i];
+			if (sp < 0) {
+				break;
+			}
+			// Note: maxAlphaIndex[0] holds the maximal index value computed from the reduction above.
+			value += T[s * m * n + action * n + sp] * O[action * n * z + sp * z + observation] * Gamma[maxAlphaIndex[0] * n + sp];
+		}
+
+		__syncthreads();
+
+		alphaBA[beliefIndex * m * n + action * n + s] += gamma * value;
+	}
+}
+
+__global__ void lpbvi_update_distributed(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
+		const bool *A, const float *B, const float *T, const float *O, const float *R,
+		const int *nonZeroBeliefStates, unsigned int maxNonZeroBeliefStates,
+		const int *successorStates, unsigned int maxSuccessorStates,
+		float gamma,
+		const float *Gamma, const unsigned int *pi,
+		float *alphaBA,
+		float *GammaPrime, unsigned int *piPrime)
+{
+	// Each block will run a different belief. Our overall goal: Compute the value
+	// of GammaPrime[beliefIndex * n + ???] and piPrime[beliefIndex].
+	unsigned int beliefIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (beliefIndex >= r) {
+		return;
+	}
+
+	// We want to find the action that maximizes the value, store it in piPrime, as well as its alpha-vector GammaPrime.
+	float maxActionValue = FLT_MIN;
+
+	for (unsigned int action = 0; action < m; action++) {
+		// Only execute if the action is available.
+		if (A[beliefIndex * m + action]) {
+			// The potential alpha-vector has been computed, so compute the value with respect to the belief state.
+			float actionValue = 0.0f;
+			for (unsigned int i = 0; i < maxNonZeroBeliefStates; i++) {
+				int s = nonZeroBeliefStates[beliefIndex * maxNonZeroBeliefStates + i];
+				if (s < 0) {
+					break;
+				}
+				actionValue += alphaBA[beliefIndex * m * n + action * n + s] * B[beliefIndex * n + s];
+			}
+
+			// If this was larger, then overwrite piPrime and GammaPrime's values.
+			if (actionValue > maxActionValue) {
+				maxActionValue = actionValue;
+
+				piPrime[beliefIndex] = action;
+			}
+		}
+
+		__syncthreads();
+	}
+
+	for (unsigned int s = 0; s < n; s++) {
+		GammaPrime[beliefIndex * n + s] = alphaBA[beliefIndex * m * n + piPrime[beliefIndex] * n + s];
+	}
+}
+
+__global__ void lpbvi_update_full(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		const bool *A, const float *B, const float *T, const float *O, const float *R, float gamma,
 		const float *Gamma, const unsigned int *pi,
 		float *alphaBA,
@@ -166,7 +300,9 @@ __global__ void lpbvi_update(unsigned int n, unsigned int m, unsigned int z, uns
 }
 
 __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
-		const float *B, const float *T, const float *O, const float *R, float eta,
+		const float *B, const float *T, const float *O, const float *R,
+		const int *nonZeroBeliefStates, unsigned int maxNonZeroBeliefStates,
+		float eta,
 		const float *Gamma, const unsigned int *pi,
 		bool *A)
 {
@@ -183,7 +319,11 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 	for (unsigned int alphaIndex = 0; alphaIndex < r; alphaIndex++) {
 		float alphaDotBeta = 0.0f;
 
-		for (unsigned int s = 0; s < n; s++) {
+		for (unsigned int i = 0; i < maxNonZeroBeliefStates; i++) {
+			int s = nonZeroBeliefStates[beliefIndex * maxNonZeroBeliefStates + i];
+			if (s < 0) {
+				break;
+			}
 			alphaDotBeta += Gamma[alphaIndex * n + s] * B[beliefIndex * n + s];
 		}
 
@@ -191,6 +331,8 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 		if (alphaIndex == 0 || alphaDotBeta > maxAlphaDotBeta) {
 			maxAlphaDotBeta = alphaDotBeta;
 		}
+
+		__syncthreads();
 	}
 
 	// Assign all actions as not available.
@@ -204,19 +346,28 @@ __global__ void lpbvi_restrict_actions(unsigned int n, unsigned int m, unsigned 
 	for (unsigned int alphaIndex = 0; alphaIndex < r; alphaIndex++) {
 		float alphaDotBeta = 0.0f;
 
-		for (unsigned int s = 0; s < n; s++) {
+		for (unsigned int i = 0; i < maxNonZeroBeliefStates; i++) {
+			int s = nonZeroBeliefStates[beliefIndex * maxNonZeroBeliefStates + i];
+			if (s < 0) {
+				break;
+			}
 			alphaDotBeta += Gamma[alphaIndex * n + s] * B[beliefIndex * n + s];
 		}
 
-		if (maxAlphaDotBeta - alphaDotBeta < eta) {
+		// Note: We allow for a small tolerance based on floating point errors.
+		if (maxAlphaDotBeta - alphaDotBeta < eta + FLT_ERR_TOL) {
 			A[beliefIndex * m + pi[alphaIndex]] = true;
 		}
+
+		__syncthreads();
 	}
 }
 
 int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		bool *A, const float *d_B,
 		const float *d_T, const float *d_O, const float *d_R,
+		const int *d_NonZeroBeliefStates, unsigned int maxNonZeroBeliefStates,
+		const int *d_SuccessorStates, unsigned int maxSuccessorStates,
 		float gamma, float eta, unsigned int horizon,
 		unsigned int numThreads,
 		float *Gamma, unsigned int *pi)
@@ -228,6 +379,10 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 	// The device pointers for the actions taken on each alpha-vector: pi and piPrime.
 	unsigned int *d_pi;
 	unsigned int *d_piPrime;
+
+	// The device pointer for the first intermediate set of computations for dot(alpha, beta)
+	// in the innermost loop.
+//	float *d_AlphaDotBeta;
 
 	// The device pointer for the intermediate alpha-vectors computed in the inner for loop.
 	float *d_AlphaBA;
@@ -297,8 +452,16 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		return -3;
 	}
 
+//	// Create the device-side memory for the intermediate variable alphaDotBeta.
+//	if (cudaMalloc(&d_AlphaDotBeta, r * m * z * r * sizeof(float)) != cudaSuccess) {
+//		fprintf(stderr, "Error[lpbvi_cuda]: %s",
+//				"Failed to allocate device-side memory for alphaDotBeta.");
+//		return -3;
+//	}
+
 	// Create the device-side memory for the intermediate variable alphaBA.
-	if (cudaMalloc(&d_AlphaBA, r * n * sizeof(float)) != cudaSuccess) {
+//	if (cudaMalloc(&d_AlphaBA, r * n * sizeof(float)) != cudaSuccess) { // Full Version.
+	if (cudaMalloc(&d_AlphaBA, r * m * n * sizeof(float)) != cudaSuccess) { // Distributed Version.
 		fprintf(stderr, "Error[lpbvi_cuda]: %s",
 				"Failed to allocate device-side memory for alphaBA.");
 		return -3;
@@ -308,16 +471,129 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 	for (int t = 0; t < horizon; t++) {
 		fprintf(stdout, "Iteration %i of %i\n", t+1, horizon);
 
+		//* Run the Distributed Version of the update.
+
+		lpbvi_initialize_alphaBA<<< dim3(r, m, 1), numThreads >>>(n, m, r, d_R, d_AlphaBA);
+
+		// Check if there was an error executing the kernel.
+		if (cudaGetLastError() != cudaSuccess) {
+			fprintf(stderr, "Error[lpbvi_cuda]: %s",
+							"Failed to execute the 'initialization of alphaBA' kernel.");
+			return -3;
+		}
+
+		// Wait for the kernel to finish before looping more.
+		if (cudaDeviceSynchronize() != cudaSuccess) {
+			fprintf(stderr, "Error[lpbvi_cuda]: %s",
+							"Failed to synchronize the device after 'initialization of alphaBA' kernel.");
+			return -3;
+		}
+
+//		for (unsigned int beliefIndex = 0; beliefIndex < r; beliefIndex++) {
+
+//			if (beliefIndex % (unsigned int)(r / 4) == 0) {
+//				fprintf(stdout, "Belief Index: %i / %i\n", beliefIndex + 1, r);
+//				std::cout.flush();
+//			}
+
+////			lpbvi_compute_alphaDotBeta<<< dim3(r, m, z * r), numThreads >>>(
+//			lpbvi_compute_alphaDotBeta<<< dim3(m, z, r), numThreads >>>(
+//						n, m, z, r,
+//						d_A, d_B, d_T, d_O, d_R, gamma,
+//						d_Gamma, d_pi, beliefIndex,
+//						d_AlphaDotBeta);
+//
+//			// Check if there was an error executing the kernel.
+//			if (cudaGetLastError() != cudaSuccess) {
+//				fprintf(stderr, "Error[lpbvi_cuda]: %s",
+//								"Failed to execute the 'initialization of alphaBA' kernel.");
+//				return -3;
+//			}
+//
+//			// Wait for the kernel to finish before looping more.
+//			if (cudaDeviceSynchronize() != cudaSuccess) {
+//				fprintf(stderr, "Error[lpbvi_cuda]: %s",
+//								"Failed to synchronize the device after 'initialization of alphaBA' kernel.");
+//				return -3;
+//			}
+
+			lpbvi_compute_alphaBA<<< dim3(r, m, z), numThreads,
+//			lpbvi_compute_alphaBA<<< dim3(m, z, 1), numThreads,
+					numThreads * sizeof(float) + numThreads * sizeof(unsigned int) >>>(
+						n, m, z, r,
+						d_A, d_B, d_T, d_O, d_R,
+						d_NonZeroBeliefStates, maxNonZeroBeliefStates,
+						d_SuccessorStates, maxSuccessorStates,
+						gamma,
+						d_Gamma, d_pi,
+//						beliefIndex, d_AlphaDotBeta,
+						d_AlphaBA);
+
+			// Check if there was an error executing the kernel.
+			if (cudaGetLastError() != cudaSuccess) {
+				fprintf(stderr, "Error[lpbvi_cuda]: %s",
+								"Failed to execute the 'compute alphaBA' kernel.");
+				return -3;
+			}
+
+			// Wait for the kernel to finish before looping more.
+			if (cudaDeviceSynchronize() != cudaSuccess) {
+				fprintf(stderr, "Error[lpbvi_cuda]: %s",
+								"Failed to synchronize the device after 'compute alphaBA' kernel.");
+				return -3;
+			}
+//		}
+
 		// Execute a kernel for the first three stages of for-loops: B, A, Z, as a 3d-block,
 		// and the 4th stage for-loop over Gamma as the threads.
 		if (t % 2 == 0) {
-			lpbvi_update<<< numBlocks, numThreads >>>(n, m, z, r,
+			lpbvi_update_distributed<<< numBlocks, numThreads >>>(n, m, z, r,
+					d_A, d_B, d_T, d_O, d_R,
+					d_NonZeroBeliefStates, maxNonZeroBeliefStates,
+					d_SuccessorStates, maxSuccessorStates,
+					gamma,
+					d_Gamma, d_pi,
+					d_AlphaBA,
+					d_GammaPrime, d_piPrime);
+		} else {
+			lpbvi_update_distributed<<< numBlocks, numThreads >>>(n, m, z, r,
+					d_A, d_B, d_T, d_O, d_R,
+					d_NonZeroBeliefStates, maxNonZeroBeliefStates,
+					d_SuccessorStates, maxSuccessorStates,
+					gamma,
+					d_GammaPrime, d_piPrime,
+					d_AlphaBA,
+					d_Gamma, d_pi);
+		}
+
+		// Check if there was an error executing the kernel.
+		if (cudaGetLastError() != cudaSuccess) {
+			fprintf(stderr, "Error[lpbvi_cuda]: %s",
+							"Failed to execute the 'update distributed' kernel.");
+			return -3;
+		}
+
+		// Wait for the kernel to finish before looping more.
+		if (cudaDeviceSynchronize() != cudaSuccess) {
+			fprintf(stderr, "Error[lpbvi_cuda]: %s",
+							"Failed to synchronize the device after 'update distributed' kernel.");
+			return -3;
+		}
+
+		//*/
+
+		/* Run the Full Version of the update.
+
+		// Execute a kernel for the first three stages of for-loops: B, A, Z, as a 3d-block,
+		// and the 4th stage for-loop over Gamma as the threads.
+		if (t % 2 == 0) {
+			lpbvi_update_full<<< numBlocks, numThreads >>>(n, m, z, r,
 					d_A, d_B, d_T, d_O, d_R, gamma,
 					d_Gamma, d_pi,
 					d_AlphaBA,
 					d_GammaPrime, d_piPrime);
 		} else {
-			lpbvi_update<<< numBlocks, numThreads >>>(n, m, z, r,
+			lpbvi_update_full<<< numBlocks, numThreads >>>(n, m, z, r,
 					d_A, d_B, d_T, d_O, d_R, gamma,
 					d_GammaPrime, d_piPrime,
 					d_AlphaBA,
@@ -337,7 +613,10 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 							"Failed to synchronize the device.");
 			return -3;
 		}
+
+		//*/
 	}
+
 	// Copy the final result of Gamma and pi to the variables. This assumes
 	// that the memory has been allocated.
 	if (horizon % 2 == 1) {
@@ -366,7 +645,9 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 
 	// Once freed, compute the available actions for the next iteration.
 	lpbvi_restrict_actions<<< numBlocks, numThreads >>>(n, m, z, r,
-					d_B, d_T, d_O, d_R, eta,
+					d_B, d_T, d_O, d_R,
+					d_NonZeroBeliefStates, maxNonZeroBeliefStates,
+					eta,
 					d_Gamma, d_pi, d_A);
 
 	// Check if there was an error executing the kernel.
@@ -383,7 +664,7 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 		return -3;
 	}
 
-	// Copy the result to the r-n array A.
+	// Copy the result to the r-m array A.
 	if (cudaMemcpy(A, d_A, r * m * sizeof(bool), cudaMemcpyDeviceToHost) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_cuda]: %s",
 				"Failed to copy memory from device to host for the available actions at each belief state A.");
@@ -396,6 +677,7 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 	cudaFree(d_GammaPrime);
 	cudaFree(d_pi);
 	cudaFree(d_piPrime);
+//	cudaFree(d_AlphaDotBeta);
 	cudaFree(d_AlphaBA);
 
 	return 0;
@@ -498,7 +780,58 @@ int lpbvi_initialize_rewards(unsigned int n, unsigned int m, const float *R, flo
 	return 0;
 }
 
-int lpbvi_uninitialize(float *&d_B, float *&d_T, float *&d_O, float **&d_R, unsigned int k)
+int lpbvi_initialize_nonzero_beliefs(unsigned int r, unsigned int maxNonZeroBeliefStates,
+		int *nonZeroBeliefStates, int *&d_NonZeroBeliefStates)
+{
+	// Ensure the data is valid.
+	if (r == 0 || maxNonZeroBeliefStates == 0 || nonZeroBeliefStates == nullptr) {
+		return -1;
+	}
+
+	// Allocate the memory on the device.
+	if (cudaMalloc(&d_NonZeroBeliefStates, r * maxNonZeroBeliefStates * sizeof(int)) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_initialize_nonzero_beliefs]: %s",
+				"Failed to allocate device-side memory for the non-zero belief states.");
+		return -3;
+	}
+
+	// Copy the data from the host to the device.
+	if (cudaMemcpy(d_NonZeroBeliefStates, nonZeroBeliefStates, r * maxNonZeroBeliefStates * sizeof(int), cudaMemcpyHostToDevice) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_initialize_nonzero_beliefs]: %s",
+				"Failed to copy memory from host to device for the non-zero belief states.");
+		return -3;
+	}
+
+	return 0;
+}
+
+int lpbvi_initialize_successors(unsigned int n, unsigned int m, unsigned int maxSuccessorStates,
+		int *successorStates, int *&d_SuccessorStates)
+{
+	// Ensure the data is valid.
+	if (n == 0 || m == 0 || maxSuccessorStates <= 0 || successorStates == nullptr) {
+		return -1;
+	}
+
+	// Allocate the memory on the device.
+	if (cudaMalloc(&d_SuccessorStates, n * m * maxSuccessorStates * sizeof(int)) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_initialize_successors]: %s",
+				"Failed to allocate device-side memory for the successor states.");
+		return -3;
+	}
+
+	// Copy the data from the host to the device.
+	if (cudaMemcpy(d_SuccessorStates, successorStates, n * m * maxSuccessorStates * sizeof(int), cudaMemcpyHostToDevice) != cudaSuccess) {
+		fprintf(stderr, "Error[lpbvi_initialize_successors]: %s",
+				"Failed to copy memory from host to device for the successor states.");
+		return -3;
+	}
+
+	return 0;
+}
+
+int lpbvi_uninitialize(float *&d_B, float *&d_T, float *&d_O, float **&d_R, unsigned int k,
+		int *&d_NonZeroBeliefStates, int *&d_SuccessorStates)
 {
 	if (d_B != nullptr) {
 		cudaFree(d_B);
@@ -520,6 +853,16 @@ int lpbvi_uninitialize(float *&d_B, float *&d_T, float *&d_O, float **&d_R, unsi
 			cudaFree(d_R[i]);
 		}
 	}
+
+	if (d_NonZeroBeliefStates != nullptr) {
+		cudaFree(d_NonZeroBeliefStates);
+	}
+	d_NonZeroBeliefStates = nullptr;
+
+	if (d_SuccessorStates != nullptr) {
+		cudaFree(d_SuccessorStates);
+	}
+	d_SuccessorStates = nullptr;
 
 	return 0;
 }

@@ -65,11 +65,19 @@ LPBVICuda::LPBVICuda() : LPBVI()
 	d_O = nullptr;
 	d_R = nullptr;
 	k = 1;
+	d_NonZeroBeliefStates = nullptr;
+	d_SuccessorStates = nullptr;
 }
 
 LPBVICuda::~LPBVICuda()
 {
 	uninitialize_variables();
+}
+
+void LPBVICuda::set_performance_variables(unsigned int nonZeroBeliefStates, unsigned int successorStates)
+{
+	maxNonZeroBeliefStates = nonZeroBeliefStates;
+	maxSuccessorStates = successorStates;
 }
 
 PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
@@ -113,7 +121,7 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 	// Initialize variables for CUDA.
 	initialize_variables(S, A, Z, T, O, R, h, delta);
 
-	// Setup the array of actions available for each belief point. They are all available to start.
+	// Setup the array of actions available for each belief dwpoint. They are all available to start.
 	bool *available = new bool[B.size() * A->get_num_actions()];
 	for (unsigned int i = 0; i < B.size() * A->get_num_actions(); i++) {
 		available[i] = true;
@@ -153,6 +161,10 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 				d_T,
 				d_O,
 				d_R[i],
+				d_NonZeroBeliefStates,
+				maxNonZeroBeliefStates,
+				d_SuccessorStates,
+				maxSuccessorStates,
 				h->get_discount_factor(),
 				etai,
 				updates,
@@ -160,21 +172,29 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 				Gamma,
 				pi);
 
-		// Print out Gamma and pi.
-		std::cout << "Gamma:" << std::endl;
-		for (unsigned int x = 0; x < B.size(); x++) {
-			for (unsigned int y = 0; y < S->get_num_states(); y++) {
-				std::cout << y << ":" << Gamma[x * S->get_num_states() + y] << " ";
-			}
-			std::cout << std::endl;
-		}
-		std::cout.flush();
-
-		std::cout << "pi:" << std::endl;
-		for (unsigned int x = 0; x < B.size(); x++) {
-			std::cout << x << ":" << pi[x] << " ";
-		}
-		std::cout.flush();
+//		// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//		// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//		// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//		// Print out Gamma and pi.
+//		if (i == 0) {
+//			std::cout << "Gamma:" << std::endl;
+//			for (unsigned int x = 0; x < B.size(); x++) {
+//				for (unsigned int y = 0; y < S->get_num_states(); y++) {
+//					std::cout << y << ":" << Gamma[x * S->get_num_states() + y] << " ";
+//				}
+//				std::cout << std::endl;
+//			}
+//			std::cout.flush();
+//
+//			std::cout << "pi:" << std::endl;
+//			for (unsigned int x = 0; x < B.size(); x++) {
+//				std::cout << x << ":" << pi[x] << " ";
+//			}
+//			std::cout.flush();
+//		}
+//		// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//		// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//		// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
 		// Create the vector of policy alpha vectors and set the policy equal to them.
 		// Note: This transfer responsibility of memory management to the policy variable.
@@ -216,6 +236,20 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 		}
 		counter++;
 	}
+
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	for (unsigned int i = 0; i < B.size(); i++) {
+//		for (unsigned int j = 0; j < S->get_num_states(); j++) {
+//			std::cout << Barray[i * S->get_num_states() + j] << " ";
+//		}
+//		std::cout << std::endl;
+//	}
+//	std::cout.flush();
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
 	int result = lpbvi_initialize_belief_points(S->get_num_states(), B.size(), Barray, d_B);
 	delete [] Barray;
@@ -263,11 +297,128 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 			throw PolicyException();
 		}
 	}
+
+	// Purposefully an int for having the sign bit store the termination point in the array's row.
+	// This stores the hash values of the states (which in our case will be indexes).
+	int *nonZeroBeliefStates = new int[B.size() * maxNonZeroBeliefStates];
+	counter = 0;
+
+	for (BeliefState *b : B) {
+		unsigned int counterOverStates = 0;
+
+		for (auto state : *S) {
+			State *s = resolve(state);
+
+			if (b->get(s) > 0.0) {
+				// Note: 'counter' works here because B is a vector, which is ordered, so the for loop
+				// steps over the belief set in order anyway.
+				nonZeroBeliefStates[counter * maxNonZeroBeliefStates + counterOverStates] = s->hash_value();
+				counterOverStates++;
+			}
+
+			if (counterOverStates == maxNonZeroBeliefStates) {
+				break;
+			}
+		}
+
+		if (counterOverStates < maxNonZeroBeliefStates) {
+			nonZeroBeliefStates[counter * maxNonZeroBeliefStates + counterOverStates] = -1;
+		}
+
+		counter++;
+	}
+
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	for (unsigned int i = 0; i < maxNonZeroBeliefStates; i++) {
+//		for (unsigned int j = 0; j < B.size(); j++) {
+//			std::cout << nonZeroBeliefStates[j * maxNonZeroBeliefStates + i] << "\t";
+//		}
+//		std::cout << std::endl;
+//	}
+//	std::cout.flush();
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+
+	result = lpbvi_initialize_nonzero_beliefs(B.size(), maxNonZeroBeliefStates,
+			nonZeroBeliefStates, d_NonZeroBeliefStates);
+	delete [] nonZeroBeliefStates;
+	if (result != 0) {
+		throw PolicyException();
+	}
+
+	// Similarly, this holds the successor state hash values (which in our case are indexes) for
+	// each state-action pair.
+	int *successorStates = new int[S->get_num_states() * A->get_num_actions() * maxSuccessorStates];
+	counter = 0;
+
+	for (auto state : *S) {
+		State *s = resolve(state);
+		unsigned int counterOverActions = 0;
+
+		for (auto action : *A) {
+			Action *a = resolve(action);
+			unsigned int counterOverNextStates = 0;
+
+			for (auto statePrime : *S) {
+				State *sp = resolve(statePrime);
+
+				if (T->get(s, a, sp) > 0.0) {
+					successorStates[s->hash_value() * A->get_num_actions() * maxSuccessorStates +
+									a->hash_value() * maxSuccessorStates +
+									counterOverNextStates] = sp->hash_value();
+					counterOverNextStates++;
+				}
+
+				if (counterOverNextStates == maxSuccessorStates) {
+					break;
+				}
+			}
+
+			if (counterOverNextStates < maxSuccessorStates) {
+				successorStates[s->hash_value() * A->get_num_actions() * maxSuccessorStates +
+							a->hash_value() * maxSuccessorStates +
+							counterOverNextStates] = -1;
+			}
+
+			counterOverActions++;
+		}
+
+		counter++;
+	}
+
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	for (unsigned int i = 0; i < S->get_num_states(); i++) {
+//		std::cout << "S = " << i << ":\n";
+//		for (unsigned int j = 0; j < A->get_num_actions(); j++) {
+//			std::cout << "<" << successorStates[i * A->get_num_actions() * maxSuccessorStates +
+//										 j * maxSuccessorStates + 0]
+//						<< ", "
+//						<< successorStates[i * A->get_num_actions() * maxSuccessorStates +
+//										 j * maxSuccessorStates + 1] << "> ";
+//		}
+//		std::cout << std::endl;
+//	}
+//	std::cout.flush();
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+
+	result = lpbvi_initialize_successors(S->get_num_states(), A->get_num_actions(), maxSuccessorStates,
+			successorStates, d_SuccessorStates);
+	delete [] successorStates;
+	if (result != 0) {
+		throw PolicyException();
+	}
 }
 
 void LPBVICuda::uninitialize_variables()
 {
-	lpbvi_uninitialize(d_B, d_T, d_O, d_R, k);
+	lpbvi_uninitialize(d_B, d_T, d_O, d_R, k, d_NonZeroBeliefStates, d_SuccessorStates);
 
 	delete [] d_R;
 	d_R = nullptr;
