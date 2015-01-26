@@ -47,11 +47,18 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	losmLPOMDP->set_slack(0.0f, 0.0f);
+	losmLPOMDP->set_slack(10.0f, 0.0f);
 
-//	LPBVI solver;
+	// -------------------------------------------------------------------------------------
+	/* CPU Version
+	LPBVI solver;
+	//*/
+
+	//* GPU Version
 	LPBVICuda solver;
 	solver.set_performance_variables(2, 2);
+	//*/
+	// -------------------------------------------------------------------------------------
 
 	solver.eta_constraint(false);
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
@@ -61,7 +68,7 @@ int main(int argc, char *argv[])
 	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
 	//*/
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(100);
+	solver.set_num_update_iterations(1000);
 
 
 
@@ -107,30 +114,30 @@ int main(int argc, char *argv[])
 		// The size of statesVector is always 2 in our case.
 		BeliefState *b = nullptr;
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 1.0);
-//		b->set(statesVector[1], 0.0);
-//		solver.add_initial_belief_state(b);
+		b = new BeliefState();
+		b->set(statesVector[0], 1.0);
+		b->set(statesVector[1], 0.0);
+		solver.add_initial_belief_state(b);
 
 		b = new BeliefState();
 		b->set(statesVector[0], 0.75);
 		b->set(statesVector[1], 0.25);
 		solver.add_initial_belief_state(b);
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 0.5);
-//		b->set(statesVector[1], 0.5);
-//		solver.add_initial_belief_state(b);
+		b = new BeliefState();
+		b->set(statesVector[0], 0.5);
+		b->set(statesVector[1], 0.5);
+		solver.add_initial_belief_state(b);
 
 		b = new BeliefState();
 		b->set(statesVector[0], 0.25);
 		b->set(statesVector[1], 0.75);
 		solver.add_initial_belief_state(b);
 
-//		b = new BeliefState();
-//		b->set(statesVector[0], 0.0);
-//		b->set(statesVector[1], 1.0);
-//		solver.add_initial_belief_state(b);
+		b = new BeliefState();
+		b->set(statesVector[0], 0.0);
+		b->set(statesVector[1], 1.0);
+		solver.add_initial_belief_state(b);
 	}
 	//*/
 

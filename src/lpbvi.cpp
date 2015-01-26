@@ -421,9 +421,11 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 			// Restrict the set of actions available to each belief point in the next i+1 value function.
 			if (i < R->get_num_rewards() - 1) {
 				for (BeliefState *b : B) {
-					std::cout << "Ai[b].size(): " << Ai[b].size();
+//					std::cout << "Ai[b].size(): " << Ai[b].size();
+
 					policy[i]->get(b, etai, Ai[b]);
-					std::cout << " -> " << Ai[b].size() << std::endl; std::cout.flush();
+
+//					std::cout << " -> " << Ai[b].size() << std::endl; std::cout.flush();
 				}
 			}
 

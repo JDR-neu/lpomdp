@@ -687,6 +687,7 @@ int lpbvi_initialize_belief_points(unsigned int n, unsigned int r, const float *
 {
 	// Ensure the data is valid.
 	if (n == 0 || r == 0 || B == nullptr) {
+		fprintf(stderr, "Error[lpbvi_initialize_belief_points]: %s", "Invalid input.");
 		return -1;
 	}
 
@@ -711,6 +712,7 @@ int lpbvi_initialize_state_transitions(unsigned int n, unsigned int m, const flo
 {
 	// Ensure the data is valid.
 	if (n == 0 || m == 0 || T == nullptr) {
+		fprintf(stderr, "Error[lpbvi_initialize_state_transitions]: %s", "Invalid input.");
 		return -1;
 	}
 
@@ -736,6 +738,7 @@ int lpbvi_initialize_observation_transitions(unsigned int n, unsigned int m, uns
 {
 	// Ensure the data is valid.
 	if (n == 0 || m == 0 || z == 0 || O == nullptr) {
+		fprintf(stderr, "Error[lpbvi_initialize_observation_transitions]: %s", "Invalid input.");
 		return -1;
 	}
 
@@ -760,18 +763,19 @@ int lpbvi_initialize_rewards(unsigned int n, unsigned int m, const float *R, flo
 {
 	// Ensure the data is valid.
 	if (n == 0 || m == 0 || R == nullptr) {
+		fprintf(stderr, "Error[lpbvi_initialize_rewards]: %s", "Invalid input.");
 		return -1;
 	}
 
 	// Allocate the memory on the device.
-	if (cudaMalloc(&d_R, n * m * n * sizeof(float)) != cudaSuccess) {
+	if (cudaMalloc(&d_R, n * m * sizeof(float)) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_initialize_rewards]: %s",
 				"Failed to allocate device-side memory for the rewards.");
 		return -3;
 	}
 
 	// Copy the data from the host to the device.
-	if (cudaMemcpy(d_R, R, n * m * n * sizeof(float), cudaMemcpyHostToDevice) != cudaSuccess) {
+	if (cudaMemcpy(d_R, R, n * m * sizeof(float), cudaMemcpyHostToDevice) != cudaSuccess) {
 		fprintf(stderr, "Error[lpbvi_initialize_rewards]: %s",
 				"Failed to copy memory from host to device for the rewards.");
 		return -3;
@@ -785,6 +789,7 @@ int lpbvi_initialize_nonzero_beliefs(unsigned int r, unsigned int maxNonZeroBeli
 {
 	// Ensure the data is valid.
 	if (r == 0 || maxNonZeroBeliefStates == 0 || nonZeroBeliefStates == nullptr) {
+		fprintf(stderr, "Error[lpbvi_initialize_nonzero_beliefs]: %s", "Invalid input.");
 		return -1;
 	}
 
@@ -810,6 +815,7 @@ int lpbvi_initialize_successors(unsigned int n, unsigned int m, unsigned int max
 {
 	// Ensure the data is valid.
 	if (n == 0 || m == 0 || maxSuccessorStates <= 0 || successorStates == nullptr) {
+		fprintf(stderr, "Error[lpbvi_initialize_successors]: %s", "Invalid input.");
 		return -1;
 	}
 

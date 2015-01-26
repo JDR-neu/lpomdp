@@ -67,6 +67,8 @@ LPBVICuda::LPBVICuda() : LPBVI()
 	k = 1;
 	d_NonZeroBeliefStates = nullptr;
 	d_SuccessorStates = nullptr;
+	maxNonZeroBeliefStates = 1;
+	maxSuccessorStates = 1;
 }
 
 LPBVICuda::~LPBVICuda()
@@ -121,7 +123,7 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 	// Initialize variables for CUDA.
 	initialize_variables(S, A, Z, T, O, R, h, delta);
 
-	// Setup the array of actions available for each belief dwpoint. They are all available to start.
+	// Setup the array of actions available for each belief point. They are all available to start.
 	bool *available = new bool[B.size() * A->get_num_actions()];
 	for (unsigned int i = 0; i < B.size() * A->get_num_actions(); i++) {
 		available[i] = true;
@@ -228,6 +230,8 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 		StateTransitions *T, ObservationTransitions *O, FactoredRewards *R,
 		Horizon *h, std::vector<float> &delta)
 {
+	std::cout << "Creating B... "; std::cout.flush();
+
 	float *Barray = new float[B.size() * S->get_num_states()];
 	unsigned int counter = 0;
 	for (BeliefState *b : B) {
@@ -251,11 +255,15 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 //	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 //	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
+	std::cout << "Transferring B... "; std::cout.flush();
+
 	int result = lpbvi_initialize_belief_points(S->get_num_states(), B.size(), Barray, d_B);
 	delete [] Barray;
 	if (result != 0) {
 		throw PolicyException();
 	}
+
+	std::cout << "Done.\nTransferring T... "; std::cout.flush();
 
 	StateTransitionsArray *Tarray = dynamic_cast<StateTransitionsArray *>(T);
 	if (Tarray == nullptr) {
@@ -269,6 +277,8 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 	if (result != 0) {
 		throw PolicyException();
 	}
+
+	std::cout << "Done.\nTransferring O... "; std::cout.flush();
 
 	ObservationTransitionsArray *Oarray = dynamic_cast<ObservationTransitionsArray *>(O);
 	if (Oarray == nullptr) {
@@ -284,10 +294,17 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 		throw PolicyException();
 	}
 
+	std::cout << "Done.\nTransferring R... "; std::cout.flush();
+
 	k = R->get_num_rewards();
 	d_R = new float*[k];
 	for (unsigned int i = 0; i < k; i++) {
 		SARewardsArray *Ri = dynamic_cast<SARewardsArray *>(R->get(i));
+		if (Ri == nullptr) {
+			throw PolicyException();
+		}
+
+		std::cout << (i + 1) << " "; std::cout.flush();
 
 		result = lpbvi_initialize_rewards(S->get_num_states(),
 				A->get_num_actions(),
@@ -297,6 +314,8 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 			throw PolicyException();
 		}
 	}
+
+	std::cout << ". Done.\nCreating Non-Zero Belief States... "; std::cout.flush();
 
 	// Purposefully an int for having the sign bit store the termination point in the array's row.
 	// This stores the hash values of the states (which in our case will be indexes).
@@ -342,12 +361,16 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 //	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 //	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
+	std::cout << "Transferring Non-Zero Belief States... "; std::cout.flush();
+
 	result = lpbvi_initialize_nonzero_beliefs(B.size(), maxNonZeroBeliefStates,
 			nonZeroBeliefStates, d_NonZeroBeliefStates);
 	delete [] nonZeroBeliefStates;
 	if (result != 0) {
 		throw PolicyException();
 	}
+
+	std::cout << "Done.\nCreating Successor States... "; std::cout.flush();
 
 	// Similarly, this holds the successor state hash values (which in our case are indexes) for
 	// each state-action pair.
@@ -408,12 +431,16 @@ void LPBVICuda::initialize_variables(StatesMap *S, ActionsMap *A, ObservationsMa
 //	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 //	// DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 
+	std::cout << "Transferring Successor States... "; std::cout.flush();
+
 	result = lpbvi_initialize_successors(S->get_num_states(), A->get_num_actions(), maxSuccessorStates,
 			successorStates, d_SuccessorStates);
 	delete [] successorStates;
 	if (result != 0) {
 		throw PolicyException();
 	}
+
+	std::cout << "Done.\nCompleted Variable Initialization " << std::endl; std::cout.flush();
 }
 
 void LPBVICuda::uninitialize_variables()
