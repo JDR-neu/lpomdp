@@ -469,7 +469,7 @@ int lpbvi_cuda(unsigned int n, unsigned int m, unsigned int z, unsigned int r,
 
 	// For each of the updates, run PBVI.
 	for (int t = 0; t < horizon; t++) {
-		fprintf(stdout, "Iteration %i of %i\n", t+1, horizon);
+//		fprintf(stdout, "Iteration %i of %i\n", t+1, horizon);
 
 		//* Run the Distributed Version of the update.
 

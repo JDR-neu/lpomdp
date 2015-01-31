@@ -47,28 +47,24 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	losmLPOMDP->set_slack(10.0f, 0.0f);
+	losmLPOMDP->set_slack(30.0f, 0.0f);
 
 	// -------------------------------------------------------------------------------------
-	/* CPU Version
+	//* CPU Version
 	LPBVI solver;
+	solver.set_num_update_iterations(10);
 	//*/
 
-	//* GPU Version
+	/* GPU Version
 	LPBVICuda solver;
 	solver.set_performance_variables(2, 2);
+	solver.set_num_update_iterations(500);
 	//*/
 	// -------------------------------------------------------------------------------------
 
 	solver.eta_constraint(false);
 	solver.set_expansion_rule(POMDPPBVIExpansionRule::STOCHASTIC_SIMULATION_EXPLORATORY_ACTION);
-	/*
-	solver.set_num_expansion_iterations(1); // No expansions!
-	solver.compute_num_update_iterations(losmLPOMDP, 1.0); // Within 1.0 of optimal answer!
-	solver.set_num_update_iterations(solver.get_num_update_iterations() / 1);
-	//*/
 	solver.set_num_expansion_iterations(1);
-	solver.set_num_update_iterations(1000);
 
 
 
@@ -99,9 +95,6 @@ int main(int argc, char *argv[])
 			beliefToRecord->set(statesVector[0], 0.5);
 			beliefToRecord->set(statesVector[1], 0.5);
 			solver.set_belief_to_record(beliefToRecord);
-
-			delete beliefToRecord;
-			beliefToRecord = nullptr;
 
 			std::cout << "Found and set a belief to record." << std::endl; std::cout.flush();
 			break;
@@ -143,11 +136,18 @@ int main(int argc, char *argv[])
 
 	PolicyAlphaVectors **policy = nullptr;
 	policy = solver.solve(losmLPOMDP);
-	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
-//	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), 0.25, argv[8]);
+//	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), argv[8]);
+	losmLPOMDP->save_policy(policy, losmLPOMDP->get_rewards()->get_num_rewards(), 0.20, argv[8]);
 
-	/*
-	// After everything is computed, output the recorded values in a csv-like format to the screen.
+	// Print the V^eta of this belief state.
+	std::cout << "V^eta(b^0): [" << policy[0]->compute_value(beliefToRecord) << ", " <<
+			policy[1]->compute_value(beliefToRecord) << "]" << std::endl; std::cout.flush();
+
+	// Free the belief to record value.
+	delete beliefToRecord;
+	beliefToRecord = nullptr;
+
+	/* After everything is computed, output the recorded values in a csv-like format to the screen.
 	std::cout << "V^eta(b^0):" << std::endl; std::cout.flush();
 	for (auto Vi : solver.get_recorded_values()) {
 		for (double Vit : Vi) {
@@ -155,8 +155,9 @@ int main(int argc, char *argv[])
 		}
 		std::cout << std::endl; std::cout.flush();
 	}
+	//*/
 
-	// NOTE: We take the final collection of alpha vectors, hence policy[1].
+	/* We take the final collection of alpha vectors as the final policy, hence policy[1].
 	PolicyAlphaVectors **result = nullptr;
 	result = solver.compute_value(losmLPOMDP, policy[1]);
 
@@ -174,7 +175,7 @@ int main(int argc, char *argv[])
 		delete [] result[i];
 	}
 	delete [] result;
-	*/
+	//*/
 
 	// Free the policy memory.
 	for (unsigned int i = 0; i < losmLPOMDP->get_rewards()->get_num_rewards(); i++) {

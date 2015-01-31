@@ -51,6 +51,8 @@
 #include <unordered_map>
 #include <algorithm>
 
+#include <chrono>
+
 LPBVI::LPBVI() : POMDPPBVI()
 {
 	beliefToRecord = nullptr;
@@ -310,6 +312,11 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		recordedValues.resize(R->get_num_rewards());
 	}
 
+	// After setting up everything, begin timing.
+	auto start = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Starting...\n"; std::cout.flush();
+
 	// Perform a predefined number of expansions. Each update adds more belief points to the set B.
 	for (unsigned int e = 0; e < expansions; e++) {
 		std::cout << "Expansion " << (e + 1) << std::endl;
@@ -471,6 +478,13 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 	}
 	//*/
 
+	std::cout << "Complete LPBVI." << std::endl; std::cout.flush();
+
+	// After the main loop is complete, end timing. Also, output the result of the computation time.
+	auto end = std::chrono::high_resolution_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	std::cout << "Total Elapsed Time (CPU Version): " << elapsed.count() << std::endl; std::cout.flush();
+
 	// Free the memory of Gamma_{a, *}.
 	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
 		for (auto a : *A) {
@@ -483,6 +497,7 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 		gammaAStar[i].clear();
 	}
 	delete [] gammaAStar;
+
 
 	return policy;
 }

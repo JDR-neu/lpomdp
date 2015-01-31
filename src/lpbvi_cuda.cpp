@@ -58,6 +58,8 @@
 #include <unordered_map>
 #include <algorithm>
 
+#include <chrono>
+
 LPBVICuda::LPBVICuda() : LPBVI()
 {
 	d_B = nullptr;
@@ -128,6 +130,11 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 	for (unsigned int i = 0; i < B.size() * A->get_num_actions(); i++) {
 		available[i] = true;
 	}
+
+	// After setting up everything, begin timing.
+	auto start = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Starting...\n"; std::cout.flush();
 
 	// For each reward function, execute the CUDA code which computes the value and limits the actions for the next level.
 	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {
@@ -215,6 +222,13 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 		delete [] Gamma;
 		delete [] pi;
 	}
+
+	std::cout << "Complete LPBVI." << std::endl; std::cout.flush();
+
+	// After the main loop is complete, end timing. Also, output the result of the computation time.
+	auto end = std::chrono::high_resolution_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	std::cout << "Total Elapsed Time (GPU Version): " << elapsed.count() << std::endl; std::cout.flush();
 
 	// Uninitialize the CUDA variables.
 	uninitialize_variables();
