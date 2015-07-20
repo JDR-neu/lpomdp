@@ -30,7 +30,8 @@
 #include <iostream>
 #include <chrono>
 
-int main(int argc, char *argv[])
+// NOTE: If you want to run the code, change this to "main".
+int main_execute(int argc, char *argv[])
 {
 	// Ensure the correct number of arguments.
 	if (argc != 9) {
@@ -50,14 +51,26 @@ int main(int argc, char *argv[])
 	losmLPOMDP->set_slack(30.0f, 0.0f);
 
 	// -------------------------------------------------------------------------------------
-	//* CPU Version
+	/* CPU Version
 	LPBVI solver;
+//	solver.set_num_update_iterations(2);
+//	solver.set_num_update_iterations(4);
+//	solver.set_num_update_iterations(6);
+//	solver.set_num_update_iterations(8);
 	solver.set_num_update_iterations(10);
 	//*/
 
-	/* GPU Version
+	//* GPU Version
 	LPBVICuda solver;
 	solver.set_performance_variables(2, 2);
+//	solver.set_performance_variables(4, 2); // Complexity (below) = 4. Don't forget to change it.
+//	solver.set_performance_variables(6, 2); // Complexity (below) = 6. Don't forget to change it.
+//	solver.set_performance_variables(8, 2); // Complexity (below) = 8. Don't forget to change it.
+//	solver.set_performance_variables(10, 2); // Complexity (below) = 10. Don't forget to change it.
+//	solver.set_num_update_iterations(100);
+//	solver.set_num_update_iterations(200);
+//	solver.set_num_update_iterations(300);
+//	solver.set_num_update_iterations(400);
 	solver.set_num_update_iterations(500);
 	//*/
 	// -------------------------------------------------------------------------------------
@@ -102,7 +115,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Add uniform distribution over tiredness possibilities of states as belief points.
-	//*
+	/*
 	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
 		// The size of statesVector is always 2 in our case.
 		BeliefState *b = nullptr;
@@ -130,6 +143,163 @@ int main(int argc, char *argv[])
 		b = new BeliefState();
 		b->set(statesVector[0], 0.0);
 		b->set(statesVector[1], 1.0);
+		solver.add_initial_belief_state(b);
+	}
+	//*/
+
+	// Experiment: Less Belief Points
+	/*
+	unsigned int hackCounter = 0;
+	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
+		// The size of statesVector is always 2 in our case.
+		BeliefState *b = nullptr;
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.75);
+		b->set(statesVector[1], 0.25);
+		solver.add_initial_belief_state(b);
+
+		if (hackCounter % 2 == 0) {
+			b = new BeliefState();
+			b->set(statesVector[0], 0.5);
+			b->set(statesVector[1], 0.5);
+			solver.add_initial_belief_state(b);
+		}
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.25);
+		b->set(statesVector[1], 0.75);
+		solver.add_initial_belief_state(b);
+
+		hackCounter++;
+	}
+	//*/
+
+	// Experiment: More Belief Points
+	//*
+	unsigned int hackCounter = 0;
+	unsigned int maxBeliefPoints = 30;
+	for (auto statesVector : losmLPOMDP->get_tiredness_states()) {
+		// This is for the first case, where we just want to vary the states and actions.
+		if (hackCounter >= maxBeliefPoints) {
+			break;
+		}
+		hackCounter += 10;
+
+		// The size of statesVector is always 2 in our case.
+		BeliefState *b = nullptr;
+
+		b = new BeliefState();
+		b->set(statesVector[0], 1.0);
+		b->set(statesVector[1], 0.0);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.75);
+		b->set(statesVector[1], 0.25);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.5);
+		b->set(statesVector[1], 0.5);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.25);
+		b->set(statesVector[1], 0.75);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.0);
+		b->set(statesVector[1], 1.0);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.85);
+		b->set(statesVector[1], 0.15);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.65);
+		b->set(statesVector[1], 0.35);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.5);
+		b->set(statesVector[1], 0.5);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.35);
+		b->set(statesVector[1], 0.65);
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(statesVector[0], 0.15);
+		b->set(statesVector[1], 0.85);
+		solver.add_initial_belief_state(b);
+	}
+	//*/
+
+	// Experiment: More complex belief point distributions.
+	/*
+	unsigned int complexity = 2; // Don't forget to change the GPU max values for b...
+//	unsigned int complexity = 4; // Don't forget to change the GPU max values for b...
+//	unsigned int complexity = 6; // Don't forget to change the GPU max values for b...
+//	unsigned int complexity = 8; // Don't forget to change the GPU max values for b...
+//	unsigned int complexity = 10; // Don't forget to change the GPU max values for b...
+	unsigned int hackCounter = 0;
+	unsigned int maxBeliefPoints = 30;
+	for (unsigned int i = 0; i < losmLPOMDP->get_tiredness_states().size(); i++) {
+		// This is for the first case, where we just want to vary the states and actions.
+		if (hackCounter >= maxBeliefPoints) {
+			break;
+		}
+		hackCounter += 5;
+
+		BeliefState *b = nullptr;
+
+		b = new BeliefState();
+		b->set(losmLPOMDP->get_tiredness_states()[i][0], 0.8);
+		b->set(losmLPOMDP->get_tiredness_states()[i][1], 0.2 / (complexity - 1.0));
+		for (unsigned int j = 2; j < complexity; j += 2) {
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][0], 0.2 / (complexity - 1.0));
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][1], 0.2 / (complexity - 1.0));
+		}
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(losmLPOMDP->get_tiredness_states()[i][0], 0.6);
+		b->set(losmLPOMDP->get_tiredness_states()[i][1], 0.4 / (complexity - 1.0));
+		for (unsigned int j = 2; j < complexity; j += 2) {
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][0], 0.4 / (complexity - 1.0));
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][1], 0.4 / (complexity - 1.0));
+		}
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		for (unsigned int j = 0; j < complexity; j += 2) {
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][0], 1.0 / (complexity));
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][1], 1.0 / (complexity));
+		}
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(losmLPOMDP->get_tiredness_states()[i][1], 0.6);
+		b->set(losmLPOMDP->get_tiredness_states()[i][0], 0.4 / (complexity - 1.0));
+		for (unsigned int j = 2; j < complexity; j += 2) {
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][1], 0.4 / (complexity - 1.0));
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][0], 0.4 / (complexity - 1.0));
+		}
+		solver.add_initial_belief_state(b);
+
+		b = new BeliefState();
+		b->set(losmLPOMDP->get_tiredness_states()[i][1], 0.8);
+		b->set(losmLPOMDP->get_tiredness_states()[i][0], 0.2 / (complexity - 1.0));
+		for (unsigned int j = 2; j < complexity; j += 2) {
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][1], 0.2 / (complexity - 1.0));
+			b->set(losmLPOMDP->get_tiredness_states()[(i + j) % losmLPOMDP->get_tiredness_states().size()][0], 0.2 / (complexity - 1.0));
+		}
 		solver.add_initial_belief_state(b);
 	}
 	//*/

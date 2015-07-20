@@ -483,7 +483,7 @@ PolicyAlphaVectors **LPBVI::solve_infinite_horizon(StatesMap *S, ActionsMap *A,
 	// After the main loop is complete, end timing. Also, output the result of the computation time.
 	auto end = std::chrono::high_resolution_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-	std::cout << "Total Elapsed Time (CPU Version): " << elapsed.count() << std::endl; std::cout.flush();
+	std::cout << "Total Elapsed Time (CPU Version): " << ((double)elapsed.count() / 1000.0) << std::endl; std::cout.flush();
 
 	// Free the memory of Gamma_{a, *}.
 	for (unsigned int i = 0; i < R->get_num_rewards(); i++) {

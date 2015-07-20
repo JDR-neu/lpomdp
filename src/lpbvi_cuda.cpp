@@ -228,7 +228,7 @@ PolicyAlphaVectors **LPBVICuda::solve_infinite_horizon(StatesMap *S, ActionsMap 
 	// After the main loop is complete, end timing. Also, output the result of the computation time.
 	auto end = std::chrono::high_resolution_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-	std::cout << "Total Elapsed Time (GPU Version): " << elapsed.count() << std::endl; std::cout.flush();
+	std::cout << "Total Elapsed Time (GPU Version): " << ((double)elapsed.count() / 1000.0) << std::endl; std::cout.flush();
 
 	// Uninitialize the CUDA variables.
 	uninitialize_variables();
